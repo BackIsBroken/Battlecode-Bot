@@ -52,8 +52,9 @@ local comparison: `python3 tools/match.py bot baseline/v105 --both`.
 ## Second batch (M1100428, M1100962, M1101160, M1101179: 53 games)
 
 The rank-1 bot is again team B (the only side that suicides; it never crashes) and wins 45 of 53.
-The M1100428 opponent (v105-like: four sonars per turn, hundreds of crashes) beats it on 5 maps,
-every time because B's queen died while its own survived or the longest-dragon count went its way.
+The M1100428 opponent (v105-like: four sonars per turn, hundreds of crashes) beats it on 5 maps:
+twice on queen length after B's queen died (Around UNSW, Maze), twice on longest dragon with both
+queens dead (Australia, Portals) and once by elimination (Stripes).
 
 * **Queen:** stays at length 2-4 until round 200-250 in every game, then grows to 25-110. It is not
   very defensive: with an enemy head 2-5 cells away it moves closer about as often as away, but
