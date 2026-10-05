@@ -48,3 +48,24 @@ move in all 34 games).
 A clean reimplementation of the above (`bot/main.py`); `tools/gen_maps.py` builds the map data
 modules `bot/md_*.py` from the bundled maps. `baseline/v105` is the previous submission, kept for
 local comparison: `python3 tools/match.py bot baseline/v105 --both`.
+
+## Second batch (M1100428, M1100962, M1101160, M1101179: 53 games)
+
+The rank-1 bot is again team B (the only side that suicides; it never crashes) and wins 45 of 53.
+The M1100428 opponent (v105-like: four sonars per turn, hundreds of crashes) beats it on 5 maps,
+every time because B's queen died while its own survived or the longest-dragon count went its way.
+
+* **Queen:** stays at length 2-4 until round 200-250 in every game, then grows to 25-110. It is not
+  very defensive: with an enemy head 2-5 cells away it moves closer about as often as away, but
+  with an enemy head adjacent it steps away 181 times in 198. It still died in 23 of 53 games
+  (14 struck by an enemy dragon, 8 trapped).
+* **Queen strikes:** B killed the opponent's queen 24 times, almost always with a length 2-3
+  dragon taking 1-2 steps onto the queen's head (a few paid sprints of 3-4 steps).
+* Feeding and swarm statistics match the first batch.
+
+## Local results for `bot/` against `baseline/v105`
+
+17 tournament maps x seeds 1-2 x both sides (68 games): 23-24 wins. Biggest losses: our queen
+dies in ~54 of 68 games (mostly v105's paid sprint strikes, which reach about length+2 cells),
+and the longest-dragon tiebreak. Metered sandbox on Around UNSW: p99 54M, max 64M points per turn
+(limit 100M).
