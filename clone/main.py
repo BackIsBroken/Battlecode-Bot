@@ -28,6 +28,7 @@ QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
 SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
 CHAMPS = False    # feed a champion once the queen is gone
+QD_FEED = 0.8    # suicide-score boost next to a long ally once the queen is gone
 BLIND = True     # queen avoids portal exits outside her window
 REACH = False     # queen keeps her head beyond visible enemies' sprint reach
 ATTACK_RATES = {1: (0.68, 0.37, 0.0), 2: (0.68, 0.37, 0.0), 3: (0.79, 0.63, 0.31), 4: (0.31, 0.10, 0.03),
@@ -348,6 +349,9 @@ def execute_turn(ct, game):
     ks = kind_scores(xk)
     if not IS_QUEEN and rnd >= 100:
         ks[1] -= SPLIT_BIAS
+    if (QD_FEED and not IS_QUEEN and L <= 3 and rnd >= 200 and fg[9] >= L + 3
+            and (OUR_Q is None or rnd - OUR_Q[1] > 15)):
+        ks[2] += QD_FEED   # queen gone: rank-1 feeds nearby long allies more (11% vs our 7%)
     kind = max(range(len(ks)), key=ks.__getitem__)
 
     # feeding (rank-1: short dragons 2-3 cells from a much longer ally suicide so it eats the drops)
