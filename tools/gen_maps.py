@@ -35,6 +35,31 @@ def build(path):
     for (x, y), mm in g.beds.items():
         if mm not in types: types.append(mm)
         beds[y * W + x] = types.index(mm)
+    # distance (moves, portals included) to the nearest fast bed: average respawn gap <= 30 rounds
+    from collections import deque
+    fast = [255] * (W * H)
+    dq = deque()
+    for (x, y), (a, b) in g.beds.items():
+        if (a + b) / 2 <= 30:
+            fast[y * W + x] = 0
+            dq.append((x, y))
+    rev = {}
+    for y in range(H):
+        for x in range(W):
+            for ch in 'NESW':
+                d = g.dest((x, y), ch)
+                if d is not None:
+                    rev.setdefault(d, []).append((x, y))
+    while dq:
+        c = dq.popleft()
+        v = fast[c[1] * W + c[0]]
+        if v >= 254:
+            continue
+        for p in rev.get(c, ()):
+            i = p[1] * W + p[0]
+            if fast[i] == 255:
+                fast[i] = v + 1
+                dq.append(p)
     starts = []
     for l in text.split('\n'):
         p = l.split()
@@ -42,7 +67,7 @@ def build(path):
             n = int(p[2]); c = list(map(int, p[3:]))
             starts.append((int(p[1]), tuple(c[2 * i + 1] * W + c[2 * i] for i in range(n))))
     return dict(w=W, h=H, walls=bytes(walls), beds=bytes(beds), bedtypes=tuple(types),
-                portals=tuple(portals), starts=tuple(starts))
+                portals=tuple(portals), starts=tuple(starts), fast=bytes(fast))
 
 def main():
     sizes = {}

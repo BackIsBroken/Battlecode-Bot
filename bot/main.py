@@ -19,7 +19,10 @@ QUEEN_SPLIT_UNTIL = 100  # the queen stops splitting from this round
 FEED_FROM = 200          # short dragons start feeding longer allies
 FEED_DIST = 3            # ... when their heads are this close
 FEED_MAX_LEN = 3         # ... and they are at most this long
-LATE_FEED_FROM = 440     # from here any dragon feeds a much longer ally
+LATE_FEED_FROM = 400     # from here any dragon feeds a much longer ally
+GROW_FROM = 180          # growers stop splitting from this round ...
+GROWER_MOD = 7           # ... one dragon id in this many
+KEEP_LEN = 8             # ... and anything already this long
 BFS_CAP = 260            # cells visited by the food search
 FIRST_BFS_CAP = 120      # first turn of a process (interpreter start-up is expensive)
 SPACE_CAP = 14           # flood-fill cap for the trap check
@@ -48,6 +51,7 @@ MY_ID = -1
 IS_QUEEN = False
 MY_TEAM = 'A'
 # shared over sonar: (cell, round, length)
+HOME = None              # the queen's first head cell
 OUR_Q = None             # where our queen was last reported
 THEIR_Q = None           # where their queen was last seen
 OUT = {}                 # this turn's broadcast state, filled by execute_turn
@@ -298,6 +302,9 @@ def execute_turn(ct, game):
             THEIR_Q = (h, rnd, Lq)
     if IS_QUEEN:
         OUR_Q = (head, rnd, L)
+        global HOME
+        if HOME is None:
+            HOME = head
 
     # our own body: visible chain plus remembered head path beyond the window
     if FIRST or not HIST or HIST[-1] != head:
@@ -309,8 +316,10 @@ def execute_turn(ct, game):
 
     # free time: earliest step at which a body cell may be entered
     free_at = {}
+    # eating stops the tail retracting, so long (well fed) dragons assume some slack
+    slack = 2 if IS_QUEEN else (1 if L >= 6 else 0)
     for i, c in enumerate(body):
-        free_at[c] = L + 1 - i
+        free_at[c] = L + 1 - i + (slack if i else 0)
     lengths = {MY_ID: L}
     for did, ps in parts.items():
         if did == MY_ID:
@@ -347,7 +356,9 @@ def execute_turn(ct, game):
         if did == MY_ID or teams[did] == my_team:
             continue
         Le = lengths.get(did, 2)
-        reach = max(1, (min(Le, 99) + 3) // 4)
+        Lr = Le - 100 if Le > 99 else Le
+        # sprints may pay segments: a length-L enemy can cover about L-1 cells to hit our queen
+        reach = max(1, min(Lr + 2, 9)) if IS_QUEEN else max(1, (Lr + 3) // 4)
         frontier = [h]
         seen_d = {h: 0}
         for step in range(1, reach + 1):
@@ -377,8 +388,8 @@ def execute_turn(ct, game):
     hdist = {}
     hq = []
     for did, h in heads.items():
-        if did != MY_ID:
-            hdist[h] = 0
+        if did != MY_ID and not (IS_QUEEN and teams[did] == my_team):
+            hdist[h] = 0     # (the queen trusts allies to make way)
             hq.append(h)
     i = 0
     while i < len(hq) and len(hq) < 400:
@@ -391,6 +402,23 @@ def execute_turn(ct, game):
             if n >= 0 and n not in hdist and free_at.get(n, 0) <= t:
                 hdist[n] = t
                 hq.append(n)
+
+    def pocket_food(start, t0, cap=8):
+        # pearls a pocket will hold by the time we get there (start included)
+        seen = {start}
+        q = [(start, t0)]
+        i = 0
+        food = 0
+        while i < len(q):
+            c, t = q[i]
+            i += 1
+            if c in PEARL or (MAP is not None and BED[c] and DUE.get(c, INF) <= rnd + t):
+                food += 1
+            for n in nb(c):
+                if n >= 0 and n not in seen and free_at.get(n, 0) <= t + 1 and len(seen) < cap:
+                    seen.add(n)
+                    q.append((n, t + 1))
+        return food
 
     def space(start, t0, cap, contested=True):
         seen = {start}
@@ -411,11 +439,15 @@ def execute_turn(ct, game):
 
     def space_score(start, t0):
         # penalty for a head position with too little room; the queen also checks its own coils
-        need = min(SPACE_CAP, L + 4)
+        need = min(40, max(16, 2 * L + 6)) if IS_QUEEN else min(SPACE_CAP, L + 4)
         sp = space(start, t0, need)
         pen = 0.0
         if sp < need:
-            pen += 150.0 + (need - sp) * 20.0
+            food = 0 if IS_QUEEN or not can_split else pocket_food(start, t0)
+            if food >= 2 and L + food >= 4 and rnd < 490:
+                pen += 4.0      # pocket farm: eat, then split the tail out (the head part dies)
+            else:
+                pen += 150.0 + (need - sp) * 20.0
         if IS_QUEEN and L >= 6:
             need2 = min(L + 12, 44)
             sp2 = space(start, t0, need2, False)
@@ -447,7 +479,7 @@ def execute_turn(ct, game):
         return len(seen) - 1 >= need
 
     if not legal:
-        if L >= 4 and can_split and L - 2 >= 2 and child_ok(L - 2):
+        if L >= 4 and can_split:
             ct.do_split(L - 2)
             OUT['ok'] = True
             return
@@ -469,14 +501,60 @@ def execute_turn(ct, game):
             if rnd >= LATE_FEED_FROM:
                 ok = d <= FEED_DIST + 1 and Lj >= L + 3 and (L <= 6 or Lj >= 2 * L)
             else:
-                ok = (d <= FEED_DIST and L <= FEED_MAX_LEN and
-                      (Lj >= 2 * L + 2 or (is_q and Lj >= L + 1)))
+                # rare before the late game: the rank-1 bot makes ~40 deliberate feeds per game
+                ok = (d <= FEED_DIST and L <= FEED_MAX_LEN and ct.unit_count >= 16 and
+                      (MY_ID * 7 + rnd) % 5 == 0 and
+                      (Lj >= 2 * L + 4 or (is_q and Lj >= L + 1)))
             if ok:
                 key = (is_q, Lj)
                 if best is None or key > best:
                     best = key
         if best is not None:
             return  # suicide next to the longer ally: it eats our pearls
+
+    # ------------------------------------------------ queen strike: a sprint may pay segments to reach her head
+    if not IS_QUEEN and enemy_q is not None and enemy_q in heads:
+        tgt = heads[enemy_q]
+        maxs = L + 1
+        if tdist(head, tgt) <= maxs:
+            own = {c: i for i, c in enumerate(body)}
+            prevs = {head: None}
+            dep = {head: 0}
+            q2 = [head]
+            i = 0
+            found = False
+            while i < len(q2) and not found:
+                c = q2[i]
+                i += 1
+                t = dep[c] + 1
+                if t > maxs:
+                    continue
+                for dd in range(4):
+                    n = nb(c)[dd]
+                    if n < 0 or n in dep or not in_window(n, head):
+                        continue
+                    if n == tgt:
+                        prevs[n] = (c, dd)
+                        dep[n] = t
+                        found = True
+                        break
+                    if n in occ and (n not in own or L + 1 - own[n] > t):
+                        continue
+                    prevs[n] = (c, dd)
+                    dep[n] = t
+                    q2.append(n)
+            if found:
+                dirs = []
+                c = tgt
+                while prevs[c] is not None:
+                    c, dd = prevs[c]
+                    dirs.append(dd)
+                dirs.reverse()
+                if len(dirs) == 1:
+                    ct.make_move(DIRS[dirs[0]])
+                else:
+                    ct.make_moves([DIRS[x] for x in dirs])
+                return
 
     # ------------------------------------------------ head attack: stepping onto an enemy head kills both
     if not IS_QUEEN:
@@ -489,7 +567,7 @@ def execute_turn(ct, game):
             Le = lengths.get(did, 2)
             if Le > 99:
                 Le -= 100
-            if did == enemy_q or Le >= L or (L <= 3 and Le >= 2 and ct.unit_count >= 6):
+            if did == enemy_q or Le >= L + 1:
                 key = (did == enemy_q, Le)
                 if best_atk is None or key > best_atk[0]:
                     best_atk = (key, d)
@@ -505,6 +583,8 @@ def execute_turn(ct, game):
         want_split = False
     if want_split and rnd >= 470:
         want_split = False
+    if want_split and not IS_QUEEN and rnd >= GROW_FROM and (MY_ID % GROWER_MOD == 3 or L >= KEEP_LEN):
+        want_split = False   # growers: the longest-dragon tiebreak and somewhere for feeders to go
     if want_split:
         hd = danger.get(head)
         crowded = IS_QUEEN and any(tdist(h, head) <= 2 for did, h in heads.items() if did != MY_ID)
@@ -554,7 +634,8 @@ def execute_turn(ct, game):
                     if due <= rnd + dist[c]:
                         v = 7.0
                 else:
-                    v = min(8.0, 10.0 * BEDRATE[bt] * (rnd - SEEN[c]) * 0.5)
+                    age = rnd - SEEN[c] if SEEN[c] >= 0 else rnd + 25
+                    v = 8.0 * min(1.0, BEDRATE[bt] * age)
         elif SEEN[c] < 0:
             v = 0.3
         if v <= 0.0:
@@ -573,6 +654,16 @@ def execute_turn(ct, game):
 
     # ------------------------------------------------ long-range goals from sonar / sightings
     goal_bonus = [0.0] * 4
+    if MAP is not None and 'fast' in MAP and max(best_dir) < 1.0:
+        # nothing worth much in reach: head down the precomputed field toward the fast beds
+        fast = MAP['fast']
+        here = fast[head]
+        for d in legal:
+            fn = fast[my_nb[d]]
+            if fn < here:
+                goal_bonus[d] += 4.0
+            elif fn > here:
+                goal_bonus[d] -= 1.0
 
     def pull(g, w):
         if g in dist:
@@ -630,8 +721,21 @@ def execute_turn(ct, game):
             for did, h in heads.items():
                 if did != MY_ID and tdist(n, h) <= 2:
                     s -= 12.0
-        elif qh is not None and not feeding_ok and tdist(n, qh) <= 2:
-            s -= 30.0   # leave our queen room to move
+            if HOME is not None and rnd < 400:
+                far = tdist(n, HOME) - 5
+                if far > 0:
+                    s -= 4.0 * far
+            for did, h in heads.items():
+                if teams[did] != my_team:
+                    dh = tdist(n, h)
+                    if dh <= 7:
+                        s -= (8 - dh) * 15.0
+        elif qh is not None:
+            dq = tdist(n, qh)
+            if dq <= 1:
+                s -= 120.0   # never crowd the queen's head
+            elif dq <= 3 and not feeding_ok:
+                s -= 40.0 / dq   # leave our queen room to move
         if not in_window(n, head):
             # through a portal onto a cell we cannot see
             s -= 600.0 if IS_QUEEN else 80.0
@@ -644,7 +748,7 @@ def execute_turn(ct, game):
             dbg.append('%s:%.1f/sp%d' % ('NESW'[d], s, sp))
     d = max(scores, key=scores.get)
     if DEBUG:
-        ct.output_log('mv', 'NESW'[d], ' '.join(dbg))
+        ct.output_log('mv', 'NESW'[d], ' '.join(dbg), 'body', len(body), len(HIST))
     if scores[d] <= -2500.0 and not IS_QUEEN:
         return   # every way on risks killing our queen: dying here is cheaper
 
@@ -697,7 +801,7 @@ def execute_turn(ct, game):
                 saved[c] = free_at.pop(c, None)
             for i2, c in enumerate(newbody):
                 saved.setdefault(c, free_at.get(c))
-                free_at[c] = L + 1 - i2
+                free_at[c] = L + 1 - i2 + (slack if i2 else 0)
             pen, spf = space_score(cur, 0)
             if DEBUG:
                 ct.output_log('sprint', ''.join('NESW'[x] for x in path), 'sp', spf, 'pen', pen)
