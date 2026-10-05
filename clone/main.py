@@ -267,6 +267,12 @@ def execute_turn(ct, game):
                 break
         else:
             cands = [max(legal, key=lambda d: fd[d][10])]
+        # Real games: almost every queen loss is a length 2-3 enemy 1-3 cells away stepping onto her.
+        # With an enemy head within 4, put as much distance as possible between her and it.
+        if fg[11] <= 4:
+            roomy = [d for d in cands if fd[d][10] >= min(need, L + 4)] or cands
+            far = max(fd[d][11] for d in roomy)
+            cands = [d for d in roomy if fd[d][11] == far]
     else:
         qh = next((h for did, h in heads.items() if did in (0, 1) and teams[did] == my_team), None)
         if qh is not None:
