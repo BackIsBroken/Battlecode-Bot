@@ -21,7 +21,8 @@ HIST = []
 MY_ID = -1
 IS_QUEEN = False
 SHIELD = False   # queen prefers cells with allies around and fewer enemy heads (rank-1 queen sits in her swarm)
-ESCORT = True    # idle dragons drift toward the queen from round 150
+ESCORT = True    # idle dragons drift toward the queen
+ESCORT_FROM = 60  # rank-1 vs v106: 4-6 allies within 7 of the queen already in rounds 50-149
 SAFE = True      # queen measures room as cells she reaches before any enemy head
 QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1: 11 cells out at r50-99, 7 by r150)
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
@@ -510,7 +511,7 @@ def execute_turn(ct, game):
                       and fd[d][10] >= 6]
             if closer:
                 cands = closer
-    if (ESCORT and not IS_QUEEN and rnd >= 150 and OUR_Q is not None and rnd - OUR_Q[1] <= 6
+    if (ESCORT and not IS_QUEEN and rnd >= ESCORT_FROM and OUR_Q is not None and rnd - OUR_Q[1] <= 6
             and fg[12] == 0 and fg[11] > 3):
         here = clonefeat.tdist(W, H, head, OUR_Q[0])
         if 5 < here <= 20:
@@ -581,7 +582,7 @@ def main():
         SENT.clear()
         try:
             execute_turn(ct, game)
-            if SENT.get('ok') and game.round_num >= 150:
+            if SENT.get('ok') and game.round_num >= ESCORT_FROM - 10:
                 broadcast(ct, game.round_num, ct.head.team.value, SENT.get('back', -1))
         except Exception as e:
             ct.output_log('ERR', repr(e)[:200])
