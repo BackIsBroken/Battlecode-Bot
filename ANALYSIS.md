@@ -70,3 +70,20 @@ queens dead (Australia, Portals) and once by elimination (Stripes).
 dies in ~54 of 68 games (mostly v105's paid sprint strikes, which reach about length+2 cells),
 and the longest-dragon tiebreak. Metered sandbox on Around UNSW: p99 54M, max 64M points per turn
 (limit 100M).
+
+## Ladder results of the clone (Oct 2026) and what they show
+
+Latest clone.zip on the ladder (always side A): vs rank-1 0/17, vs other top-3 1/17 and 0/17,
+vs a top-20 team 2/9. The previous zip: 2/17, 3/17, 3/17, 3/9. For reference v106 lost 1/17 to rank-1.
+
+- No crashes or CPU-limit deaths: every no-action death is a deliberate suicide.
+- The clone loses the opening territory race. Devil vs rank-1: both colonies equal at r20 (7 vs 8
+  dragons), then rank-1 eats 107 pearls in r20-60 against our 7 and splits 50 times against our 7.
+  Rank-1 dragons occupy the pearl field (x 12-19) by r30; ours sit on its fringe and fall back.
+- Side bias: the rank-1 bot is side B in 91% of replays, so models learned its compass habits.
+  Mirror augmentation (tools/clone_train.py AUG=1) removed the asymmetry locally but did not change
+  ladder results.
+- Rank-1 sonar: 81% of received targets are outside the receiver's window and 25% hold a live pearl,
+  but dragons do not steer toward them (43% vs 45% random-legal). Claims as a direction feature:
+  no accuracy gain (74.7% both).
+- Local v105 benchmark (136 games) no longer separates builds: 65-79 wins for nearly every variant.
