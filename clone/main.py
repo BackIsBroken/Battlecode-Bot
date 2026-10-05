@@ -598,8 +598,11 @@ def main():
     while unswbc.update(ct, game):
         SENT.clear()
         try:
-            T0[0] = time.perf_counter_ns()
+            # a new dragon's first turn also pays ~31M points of interpreter start-up and model
+            # loading (the clock starts at 0 with the process): count it against the guard
+            T0[0] = time.perf_counter_ns() if T0[0] else 0
             execute_turn(ct, game)
+            T0[0] = T0[0] or 1
             # automatic cyclic GC fired at random turns and pushed them past the CPU cap:
             # collect the young generation by hand on cheap turns instead
             if spent() < 40_000_000:
