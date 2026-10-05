@@ -6,6 +6,7 @@ Features come from clonefeat.py, the same code that labelled the replays. Hard g
 never an illegal step, the queen never suicides while she can move, splits must be legal.
 """
 import random
+import time
 import helper as unswbc
 from helper import Direction
 import mapdb
@@ -144,6 +145,14 @@ def home_bfs(budget):
     HOMEQ[1] = i
     if i >= len(q):
         HOMEQ[0] = None
+
+
+T0 = [0]
+
+
+def spent():
+    # in the judge's sandbox the clock runs on CPU points (1 point = 1 ns): ~100M per turn
+    return time.perf_counter_ns() - T0[0]
 
 
 def dir_score(x):
@@ -303,7 +312,7 @@ def execute_turn(ct, game):
     if IS_QUEEN and HOME is None:
         HOME = head
     if QHOME and IS_QUEEN and rnd >= 3 and CTX is not None and len(CANDS) <= 1 and (HOMED is None or HOMEQ[0]):
-        home_bfs(150)   # spread over the early turns: a whole-map BFS in one turn broke the CPU cap
+        home_bfs(150 if spent() < 40_000_000 else 0)   # spread over the early turns: a whole-map BFS in one turn broke the CPU cap
     read_sonar(ct, rnd, my_team)
     for did in (0, 1):
         if did in heads and teams[did] == my_team:
@@ -423,7 +432,7 @@ def execute_turn(ct, game):
         # The model rarely saw queen decisions; guard her like the rank-1 queen behaves:
         # never into a pocket (space), step away from adjacent enemy heads.
         need = min(20, max(12, 2 * L + 6))
-        if SAFE:
+        if SAFE and spent() < 50_000_000:
             for d in legal:
                 fd[d][10] = min(fd[d][10], safe_space(st, CTX.nb(head)[d]))
         for ok in (lambda f: f[10] >= need and f[13] == 0 and f[11] >= 4,
@@ -537,8 +546,8 @@ def execute_turn(ct, game):
         k = min(free, steps_pred(fg + fd[bd] + [float(free)]))
         cur, cbody = n, ([n] + body if n in PEARLS else [n] + body[:-1])
         win = st.win
-        while len(path) < k:
-            if L > 24:
+        while len(path) < k and spent() < 45_000_000:
+            if L > 12 or len(path) >= 3:
                 # long bodies make each re-simulation costly (CPU cap): keep straight while clear
                 nxt = CTX.nb(cur)[path[-1]]
                 if nxt < 0 or nxt in st.occ or nxt not in win or any(nxt in CTX.nb(h) for h in heads.values()):
@@ -586,6 +595,7 @@ def main():
     while unswbc.update(ct, game):
         SENT.clear()
         try:
+            T0[0] = time.perf_counter_ns()
             execute_turn(ct, game)
             if SENT.get('ok') and game.round_num >= ESCORT_FROM - 10:
                 broadcast(ct, game.round_num, ct.head.team.value, SENT.get('back', -1))
