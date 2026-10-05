@@ -21,6 +21,12 @@ for f in files:
         t[k].append(z[k])
 tr = {k: np.concatenate(v) for k, v in tr.items()}
 te = {k: np.concatenate(v) for k, v in te.items()}
+if os.environ.get('QUEEN'):
+    # queen-only models: the colony model saw one queen decision in ~40
+    for t in (tr, te):
+        m = t['G'][:, 3] > 0
+        for k in 'DGY':
+            t[k] = t[k][m]
 print('train', len(tr['Y']), 'test', len(te['Y']))
 
 
