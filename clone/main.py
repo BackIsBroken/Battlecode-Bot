@@ -21,8 +21,9 @@ MY_ID = -1
 IS_QUEEN = False
 SHIELD = False   # queen prefers cells with allies around and fewer enemy heads (rank-1 queen sits in her swarm)
 ESCORT = True    # idle dragons drift toward the queen from round 150
-SAFE = True      # queen measures room as cells she reaches before any other head
+SAFE = True      # queen measures room as cells she reaches before any enemy head
 QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1: 11 cells out at r50-99, 7 by r150)
+QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
 HOME = None
 HOMED = None
 PEARLS = set()
@@ -64,7 +65,7 @@ QF, QT, QL, QR, QV, QR0 = (clonequeen.DIR_F, clonequeen.DIR_T, clonequeen.DIR_LC
 
 
 def safe_space(st, start, cap=20):
-    """Cells the queen reaches strictly before any other visible head (a Voronoi share), body
+    """Cells the queen reaches strictly before any visible enemy head (a Voronoi share), body
     cells counted free once her own tail passes. Plain space counts corridors other dragons are
     about to fill; real-game queens died boxed in that way."""
     nb = CTX.nb
@@ -74,8 +75,9 @@ def safe_space(st, start, cap=20):
     other = {}
     q = []
     for h, did, ally, n in st.heads:
-        other[h] = 0
-        q.append(h)
+        if not ally:
+            other[h] = 0
+            q.append(h)
     i = 0
     while i < len(q):
         c = q[i]
@@ -369,7 +371,7 @@ def execute_turn(ct, game):
     else:
         qh = next((h for did, h in heads.items() if did in (0, 1) and teams[did] == my_team), None)
         if qh is not None:
-            away = [d for d in legal if clonefeat.tdist(W, H, CTX.nb(head)[d], qh) > 1]
+            away = [d for d in legal if clonefeat.tdist(W, H, CTX.nb(head)[d], qh) > QROOM]
             if away:
                 cands = away
     if (not IS_QUEEN and L <= 3 and rnd >= 200 and OUR_Q is not None and rnd - OUR_Q[1] <= 6
