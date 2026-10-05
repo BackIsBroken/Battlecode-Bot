@@ -22,13 +22,14 @@ MY_ID = -1
 IS_QUEEN = False
 SHIELD = False   # queen prefers cells with allies around and fewer enemy heads (rank-1 queen sits in her swarm)
 ESCORT = True    # idle dragons drift toward the queen
-ESCORT_FROM = 60  # rank-1 vs v106: 4-6 allies within 7 of the queen already in rounds 50-149
+ESCORT_FROM = 150  # rank-1 vs v106: 4-6 allies within 7 of the queen already in rounds 50-149
 SAFE = True      # queen measures room as cells she reaches before any enemy head
 QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1: 11 cells out at r50-99, 7 by r150)
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
 SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
-CHAMPS = True    # feed a champion once the queen is gone
-REACH = True     # queen keeps her head beyond visible enemies' sprint reach
+CHAMPS = False    # feed a champion once the queen is gone
+BLIND = True     # queen avoids portal exits outside her window
+REACH = False     # queen keeps her head beyond visible enemies' sprint reach
 ATTACK_RATES = {1: (0.68, 0.37, 0.0), 2: (0.68, 0.37, 0.0), 3: (0.79, 0.63, 0.31), 4: (0.31, 0.10, 0.03),
                 5: (0.07, 0.0, 0.03)}
 SPRINT_ATTACK = {2: (0.02, 0.0, 0.0), 3: (0.43, 0.24, 0.22), 4: (0.25, 0.16, 0.09)}
@@ -456,7 +457,7 @@ def execute_turn(ct, game):
             cands = [d for d in cands if shield(d) == top]
         # a portal can drop her outside her window onto a dragon she cannot see (real losses on
         # Portals): only take a blind exit when nothing in view is left
-        seen = [d for d in cands if fd[d][21] > 0]
+        seen = [d for d in cands if fd[d][21] > 0] if BLIND else []
         if seen:
             cands = seen
         if REACH and cands:
