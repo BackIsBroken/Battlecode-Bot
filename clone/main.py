@@ -11,6 +11,7 @@ import time
 import helper as unswbc
 from helper import Direction
 import mapdb
+import opening
 import clonefeat
 import clonemodel
 import clonequeen
@@ -30,6 +31,14 @@ QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
 SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
 CHAMPS = False    # feed a champion once the queen is gone
+OPEN_RUSH = True # opening: head for the rank-1 bot's learned opening positions on this map
+OPEN_UNTIL = 40
+RUSH = False     # opening: head straight for the nearest fountain while no pearl is in view
+RUSH_UNTIL = 40
+FARM = False     # walk to pearl fountains (beds refilling every ~1-3 rounds) and circle them
+FARM_UNTIL = 400
+FARM_RADIUS = 12
+FOUNT = None
 ESC = True       # queen keeps two exits other heads cannot reach next turn
 QD_FEED = 0.0    # suicide-score boost next to a long ally once the queen is gone
 BLIND = False    # queen avoids portal exits outside her window
@@ -157,6 +166,36 @@ def spent():
     return time.perf_counter_ns() - T0[0]
 
 
+OPENF = [None]   # (distance bytes, transform or None) for our side, set once the map is known
+
+
+def open_dist():
+    if OPENF[0] is None:
+        ent = opening.OPEN.get(CANDS[0][0])
+        if ent is None:
+            OPENF[0] = False
+            return None
+        tf, dist = ent[0], ent[1]
+        M = CANDS[0][1]
+        t0 = [c for t, cs in M['starts'] if t == 0 for c in cs]
+        t1 = [c for t, cs in M['starts'] if t == 1 for c in cs]
+        h = SPAWN[0] if SPAWN[0] is not None else 0
+        near0 = min(clonefeat.tdist(W, H, h, c) for c in t0)
+        near1 = min(clonefeat.tdist(W, H, h, c) for c in t1)
+        OPENF[0] = (dist, tf if near1 < near0 else None)
+    if not OPENF[0]:
+        return None
+    dist, tf = OPENF[0]
+    if tf is None:
+        return lambda c: dist[c]
+    if tf == 'mx':
+        return lambda c: dist[(c // W) * W + (W - 1 - c % W)]
+    return lambda c: dist[(H - 1 - c // W) * W + (W - 1 - c % W)]
+
+
+SPAWN = [None]
+
+
 def dir_score(x):
     # the queen has her own direction model, trained on the rank-1 queen's ~30k decisions
     if IS_QUEEN:
@@ -252,6 +291,8 @@ def identify(cells, edges, timers):
     if keep:
         CANDS = keep
     CTX = clonefeat.MapCtx(CANDS[0][1])
+    global FOUNT
+    FOUNT = CANDS[0][1].get('fount')
 
 
 def chain(parts, head):
@@ -313,6 +354,8 @@ def execute_turn(ct, game):
     global OUR_Q, HOME, HOMED
     if IS_QUEEN and HOME is None:
         HOME = head
+    if SPAWN[0] is None:
+        SPAWN[0] = head
     if QHOME and IS_QUEEN and rnd >= 3 and CTX is not None and len(CANDS) <= 1 and (HOMED is None or HOMEQ[0]):
         home_bfs(150 if spent() < 40_000_000 else 0)   # spread over the early turns: a whole-map BFS in one turn broke the CPU cap
     read_sonar(ct, rnd, my_team)
@@ -544,6 +587,42 @@ def execute_turn(ct, game):
                       and fd[d][10] >= 6]
             if closer:
                 cands = closer
+    if OPEN_RUSH and rnd < OPEN_UNTIL and fg[12] == 0 and len(CANDS) <= 1:
+        # opening race: walk to where the rank-1 bot's dragons stand in rounds 10-40 on this map
+        # (learned from its replays, mirrored to our side); it wins the pearl fields that way
+        od = open_dist()
+        if od is not None:
+            here = od(head)
+            if 0 < here < 255:
+                closer = [d for d in cands if CTX.nb(head)[d] >= 0 and od(CTX.nb(head)[d]) < here
+                          and fd[d][10] >= 4]
+                if closer:
+                    cands = closer
+    if RUSH and FOUNT is not None and rnd < RUSH_UNTIL and fg[12] == 0 and len(CANDS) <= 1:
+        # opening race: rank-1 reaches the fountains ~4 cells ahead of us by round 20 and then
+        # holds them (Devil: 140 fountain pearls vs our 2); go straight for the nearest one
+        fh = FOUNT[head]
+        if 0 < fh < 255:
+            closer = [d for d in cands if CTX.nb(head)[d] >= 0 and FOUNT[CTX.nb(head)[d]] < fh
+                      and fd[d][10] >= 4]
+            if closer:
+                cands = closer
+    if FARM and FOUNT is not None and not IS_QUEEN and rnd < FARM_UNTIL and len(CANDS) <= 1:
+        # rank-1's colony growth comes from fountains (Devil, r<150: 140 of its pearls vs our 2):
+        # its short dragons walk to one and loop a 2x2 block over it, splitting at length 4
+        fh = FOUNT[head]
+        if fh <= FARM_RADIUS:
+            def fd_(d):
+                n2 = CTX.nb(head)[d]
+                return FOUNT[n2] if n2 >= 0 else 255
+            if fh <= 1:
+                ring = [d for d in cands if fd_(d) <= 1 and fd[d][10] >= 3]
+                if ring:
+                    cands = ring
+            elif fg[12] == 0 or fh <= 4:
+                closer = [d for d in cands if fd_(d) < fh and fd[d][10] >= 4]
+                if closer:
+                    cands = closer
     if (ESCORT and not IS_QUEEN and rnd >= ESCORT_FROM and OUR_Q is not None and rnd - OUR_Q[1] <= 6
             and fg[12] == 0 and fg[11] > 3):
         here = clonefeat.tdist(W, H, head, OUR_Q[0])

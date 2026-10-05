@@ -35,14 +35,7 @@ def build(path):
     for (x, y), mm in g.beds.items():
         if mm not in types: types.append(mm)
         beds[y * W + x] = types.index(mm)
-    # distance (moves, portals included) to the nearest fast bed: average respawn gap <= 30 rounds
     from collections import deque
-    fast = [255] * (W * H)
-    dq = deque()
-    for (x, y), (a, b) in g.beds.items():
-        if (a + b) / 2 <= 30:
-            fast[y * W + x] = 0
-            dq.append((x, y))
     rev = {}
     for y in range(H):
         for x in range(W):
@@ -50,16 +43,30 @@ def build(path):
                 d = g.dest((x, y), ch)
                 if d is not None:
                     rev.setdefault(d, []).append((x, y))
-    while dq:
-        c = dq.popleft()
-        v = fast[c[1] * W + c[0]]
-        if v >= 254:
-            continue
-        for p in rev.get(c, ()):
-            i = p[1] * W + p[0]
-            if fast[i] == 255:
-                fast[i] = v + 1
-                dq.append(p)
+
+    def dist_to(max_gap):
+        # distance (moves, portals included) to the nearest bed whose average respawn gap <= max_gap
+        out = [255] * (W * H)
+        dq = deque()
+        for (x, y), (a, b) in g.beds.items():
+            if (a + b) / 2 <= max_gap:
+                out[y * W + x] = 0
+                dq.append((x, y))
+        while dq:
+            c = dq.popleft()
+            v = out[c[1] * W + c[0]]
+            if v >= 254:
+                continue
+            for p in rev.get(c, ()):
+                i = p[1] * W + p[0]
+                if out[i] == 255:
+                    out[i] = v + 1
+                    dq.append(p)
+        return out
+    fast = dist_to(30)
+    # fountains: beds that refill within ~3 rounds; the rank-1 bot farms them (Devil: 140 of its
+    # first-150-round pearls came from them, ours 2)
+    fount = dist_to(3)
     starts = []
     for l in text.split('\n'):
         p = l.split()
@@ -67,7 +74,7 @@ def build(path):
             n = int(p[2]); c = list(map(int, p[3:]))
             starts.append((int(p[1]), tuple(c[2 * i + 1] * W + c[2 * i] for i in range(n))))
     return dict(w=W, h=H, walls=bytes(walls), beds=bytes(beds), bedtypes=tuple(types),
-                portals=tuple(portals), starts=tuple(starts), fast=bytes(fast))
+                portals=tuple(portals), starts=tuple(starts), fast=bytes(fast), fount=bytes(fount))
 
 def main():
     sizes = {}
