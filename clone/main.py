@@ -56,6 +56,46 @@ def dir_score(x):
     return s
 
 
+# ---- sonar: the queen announces herself; feeders relay it (keyed so enemy echoes are ignored)
+OUR_Q = None             # (cell, round, length)
+SENT = {}
+KEY = {'A': 0x5DEECE66D1F3A7B9, 'B': 0x2545F4914F6CDD1D}
+MASK64 = (1 << 64) - 1
+
+
+def tag(payload, team):
+    v = (payload ^ KEY[team] ^ (W << 40) ^ (H << 50)) & MASK64
+    v = ((v ^ (v >> 31)) * 0x9E3779B97F4A7C15) & MASK64
+    v = ((v ^ (v >> 29)) * 0xBF58476D1CE4E5B9) & MASK64
+    return (v ^ (v >> 32)) & ((1 << 30) - 1)
+
+
+def pack(cell, rnd, length, team):
+    payload = (1 | ((cell & 0x3FFF) << 2) | ((rnd & 511) << 16) | ((min(length, 511) & 511) << 25))
+    return payload | (tag(payload, team) << 34)
+
+
+def read_sonar(ct, rnd, team):
+    global OUR_Q
+    for m in ct.sonar_messages[-24:]:
+        payload = m & ((1 << 34) - 1)
+        if m >> 34 != tag(payload, team) or payload & 3 != 1:
+            continue
+        cell, r9, length = (payload >> 2) & 0x3FFF, (payload >> 16) & 511, (payload >> 25) & 511
+        r = rnd - ((rnd - r9) & 511)
+        if cell < N and (OUR_Q is None or r > OUR_Q[1]):
+            OUR_Q = (cell, r, length)
+
+
+def broadcast(ct, rnd, team, back):
+    if OUR_Q is None or rnd - OUR_Q[1] > 4:
+        return
+    msg = pack(OUR_Q[0], OUR_Q[1], OUR_Q[2], team)
+    for d in range(4):
+        if d != back:
+            ct.send_sonar(DIRS[d], msg)
+
+
 def tok(t):
     return 0 if t == '.' else (1 if t == 'w' else 2)
 
@@ -140,6 +180,15 @@ def execute_turn(ct, game):
         if ish == '1':
             heads[did] = c
 
+    global OUR_Q
+    read_sonar(ct, rnd, my_team)
+    for did in (0, 1):
+        if did in heads and teams[did] == my_team:
+            OUR_Q = (heads[did], rnd, len(parts[did]))
+    if IS_QUEEN:
+        OUR_Q = (head, rnd, L)
+    SENT['back'] = -1
+
     if not HIST or HIST[-1] != head:
         HIST = list(reversed(chain(parts.get(MY_ID, {head: 0}), head)))
     body = HIST[-L:][::-1]
@@ -162,6 +211,11 @@ def execute_turn(ct, game):
     ks = kind_scores(xk)
     kind = max(range(len(ks)), key=ks.__getitem__)
 
+    # feeding (rank-1: short dragons 2-3 cells from a much longer ally suicide so it eats the drops)
+    if not IS_QUEEN and L <= 3 and rnd >= 200 and OUR_Q is not None and rnd - OUR_Q[1] <= 1:
+        dq = clonefeat.tdist(W, H, head, OUR_Q[0])
+        if OUR_Q[2] >= L + 1 and dq <= (4 if rnd >= 420 else 3) and (rnd >= 420 or ct.unit_count >= 12):
+            return
     if kind == 2 and (not IS_QUEEN or not legal):
         return   # suicide: the rank-1 bot dies here rather than crash, or to feed a long ally
     crowded = any(clonefeat.tdist(W, H, head, h) <= 3 for did, h in heads.items() if did != MY_ID)
@@ -172,6 +226,7 @@ def execute_turn(ct, game):
             # trapped: the queen sheds two tail segments at a time (her tail frees), others keep the tail
             child = 2 if legal or IS_QUEEN else L - 2
             ct.do_split(child)
+            SENT['ok'] = True
             return
         if not legal:
             return
@@ -180,7 +235,8 @@ def execute_turn(ct, game):
         # The model rarely saw queen decisions; guard her like the rank-1 queen behaves:
         # never into a pocket (space), step away from adjacent enemy heads.
         need = min(20, max(12, 2 * L + 6))
-        for ok in (lambda f: f[10] >= need and f[13] == 0 and f[11] >= 3,
+        for ok in (lambda f: f[10] >= need and f[13] == 0 and f[11] >= 4,
+                   lambda f: f[10] >= need and f[13] == 0 and f[11] >= 3,
                    lambda f: f[10] >= need and f[13] == 0,
                    lambda f: f[10] >= need,
                    lambda f: f[10] >= min(need, L + 4) and f[13] == 0,
@@ -197,6 +253,14 @@ def execute_turn(ct, game):
             away = [d for d in legal if clonefeat.tdist(W, H, CTX.nb(head)[d], qh) > 1]
             if away:
                 cands = away
+    if (not IS_QUEEN and L <= 3 and rnd >= 200 and OUR_Q is not None and rnd - OUR_Q[1] <= 6
+            and fg[12] == 0 and OUR_Q[2] >= L + 2):
+        here = clonefeat.tdist(W, H, head, OUR_Q[0])
+        if here <= 25:
+            closer = [d for d in cands if clonefeat.tdist(W, H, CTX.nb(head)[d], OUR_Q[0]) < here
+                      and fd[d][10] >= 6]
+            if closer:
+                cands = closer
     best, bd = None, cands[0]
     for d in cands:
         x = fd[d] + fg + [1.0 if d == j else 0.0 for j in range(4)]
@@ -206,6 +270,8 @@ def execute_turn(ct, game):
     n = CTX.nb(head)[bd]
     HIST.append(n)
     ct.make_move(DIRS[bd])
+    SENT['back'] = (bd + 2) % 4
+    SENT['ok'] = True
 
 
 def main():
@@ -219,8 +285,11 @@ def main():
     MY_ID = ct.head.dragon_id
     IS_QUEEN = MY_ID in (0, 1)
     while unswbc.update(ct, game):
+        SENT.clear()
         try:
             execute_turn(ct, game)
+            if SENT.get('ok') and game.round_num >= 150:
+                broadcast(ct, game.round_num, ct.head.team.value, SENT.get('back', -1))
         except Exception as e:
             ct.output_log('ERR', repr(e)[:200])
             here = ct.get_position()
