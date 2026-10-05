@@ -25,6 +25,7 @@ ESCORT = True    # idle dragons drift toward the queen from round 150
 SAFE = True      # queen measures room as cells she reaches before any enemy head
 QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1: 11 cells out at r50-99, 7 by r150)
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
+CHAMPS = True    # feed a champion once the queen is gone
 REACH = True     # queen keeps her head beyond visible enemies' sprint reach
 ATTACK_RATES = {1: (0.68, 0.37, 0.0), 2: (0.68, 0.37, 0.0), 3: (0.79, 0.63, 0.31), 4: (0.31, 0.10, 0.03),
                 5: (0.07, 0.0, 0.03)}
@@ -169,27 +170,42 @@ def tag(payload, team):
     return (v ^ (v >> 32)) & ((1 << 30) - 1)
 
 
-def pack(cell, rnd, length, team):
-    payload = (1 | ((cell & 0x3FFF) << 2) | ((rnd & 511) << 16) | ((min(length, 511) & 511) << 25))
+CHAMP = None             # (cell, round, length): the longest non-queen ally announcing itself
+TARGET = None            # who feeders feed: the queen while she lives, else the champion
+I_CHAMP = False
+
+
+def pack(cell, rnd, length, team, kind=1):
+    payload = (kind | ((cell & 0x3FFF) << 2) | ((rnd & 511) << 16) | ((min(length, 511) & 511) << 25))
     return payload | (tag(payload, team) << 34)
 
 
 def read_sonar(ct, rnd, team):
-    global OUR_Q
+    global OUR_Q, CHAMP
     for m in ct.sonar_messages[-24:]:
         payload = m & ((1 << 34) - 1)
-        if m >> 34 != tag(payload, team) or payload & 3 != 1:
+        kind = payload & 3
+        if m >> 34 != tag(payload, team) or kind not in (1, 2):
             continue
         cell, r9, length = (payload >> 2) & 0x3FFF, (payload >> 16) & 511, (payload >> 25) & 511
         r = rnd - ((rnd - r9) & 511)
-        if cell < N and (OUR_Q is None or r > OUR_Q[1]):
-            OUR_Q = (cell, r, length)
+        if cell >= N:
+            continue
+        if kind == 1:
+            if OUR_Q is None or r > OUR_Q[1]:
+                OUR_Q = (cell, r, length)
+        elif (CHAMP is None or rnd - CHAMP[1] > 4 or length > CHAMP[2]
+              or (length == CHAMP[2] and r > CHAMP[1])):
+            CHAMP = (cell, r, length)
 
 
 def broadcast(ct, rnd, team, back):
-    if OUR_Q is None or rnd - OUR_Q[1] > 4:
+    if OUR_Q is not None and rnd - OUR_Q[1] <= 4:
+        msg = pack(OUR_Q[0], OUR_Q[1], OUR_Q[2], team)
+    elif CHAMP is not None and rnd - CHAMP[1] <= 4:
+        msg = pack(CHAMP[0], CHAMP[1], CHAMP[2], team, 2)
+    else:
         return
-    msg = pack(OUR_Q[0], OUR_Q[1], OUR_Q[2], team)
     for d in range(4):
         if d != back:
             ct.send_sonar(DIRS[d], msg)
@@ -290,6 +306,21 @@ def execute_turn(ct, game):
             OUR_Q = (heads[did], rnd, len(parts[did]))
     if IS_QUEEN:
         OUR_Q = (head, rnd, L)
+    # Rank-1 keeps growing a dragon after its queen dies (52 cells by the end, vs 23 for us):
+    # once she has gone quiet the longest dragon (>= 8) announces itself and feeders go to it.
+    global TARGET, I_CHAMP, CHAMP
+    I_CHAMP = False
+    if OUR_Q is not None and rnd - OUR_Q[1] <= 15:
+        TARGET = OUR_Q
+    elif CHAMPS and rnd >= 200:
+        ch = CHAMP if CHAMP is not None and rnd - CHAMP[1] <= 4 else None
+        if not IS_QUEEN and L >= 8 and (ch is None or ch[2] < L or ch[0] == head):
+            CHAMP = TARGET = (head, rnd, L)
+            I_CHAMP = True
+        else:
+            TARGET = ch
+    else:
+        TARGET = None
     SENT['back'] = -1
 
     if not HIST or HIST[-1] != head:
@@ -315,9 +346,9 @@ def execute_turn(ct, game):
     kind = max(range(len(ks)), key=ks.__getitem__)
 
     # feeding (rank-1: short dragons 2-3 cells from a much longer ally suicide so it eats the drops)
-    if not IS_QUEEN and L <= 3 and rnd >= 200 and OUR_Q is not None and rnd - OUR_Q[1] <= 1:
-        dq = clonefeat.tdist(W, H, head, OUR_Q[0])
-        if OUR_Q[2] >= L + 1 and dq <= (4 if rnd >= 420 else 3) and (rnd >= 420 or ct.unit_count >= 12):
+    if not IS_QUEEN and not I_CHAMP and L <= 3 and rnd >= 200 and TARGET is not None and rnd - TARGET[1] <= 1:
+        dq = clonefeat.tdist(W, H, head, TARGET[0])
+        if TARGET[2] >= L + 1 and dq <= (4 if rnd >= 420 else 3) and (rnd >= 420 or ct.unit_count >= 12):
             return
     attacks = [d for d in range(4) if fd[d][15] > 0] if not IS_QUEEN else []
     if attacks and ATTACK_RATES:
@@ -463,11 +494,11 @@ def execute_turn(ct, game):
             away = [d for d in legal if clonefeat.tdist(W, H, CTX.nb(head)[d], qh) > QROOM]
             if away:
                 cands = away
-    if (not IS_QUEEN and L <= 3 and rnd >= 200 and OUR_Q is not None and rnd - OUR_Q[1] <= 6
-            and fg[12] == 0 and OUR_Q[2] >= L + 2):
-        here = clonefeat.tdist(W, H, head, OUR_Q[0])
+    if (not IS_QUEEN and L <= 3 and rnd >= 200 and TARGET is not None and rnd - TARGET[1] <= 6
+            and fg[12] == 0 and TARGET[2] >= L + 2):
+        here = clonefeat.tdist(W, H, head, TARGET[0])
         if here <= 25:
-            closer = [d for d in cands if clonefeat.tdist(W, H, CTX.nb(head)[d], OUR_Q[0]) < here
+            closer = [d for d in cands if clonefeat.tdist(W, H, CTX.nb(head)[d], TARGET[0]) < here
                       and fd[d][10] >= 6]
             if closer:
                 cands = closer
