@@ -281,8 +281,8 @@ def execute_turn(ct, game):
     global OUR_Q, HOME, HOMED
     if IS_QUEEN and HOME is None:
         HOME = head
-    if QHOME and IS_QUEEN and CTX is not None and len(CANDS) <= 1 and (HOMED is None or HOMEQ[0]):
-        home_bfs(400)   # spread over the early turns: a whole-map BFS in one turn broke the CPU cap
+    if QHOME and IS_QUEEN and rnd >= 3 and CTX is not None and len(CANDS) <= 1 and (HOMED is None or HOMEQ[0]):
+        home_bfs(150)   # spread over the early turns: a whole-map BFS in one turn broke the CPU cap
     read_sonar(ct, rnd, my_team)
     for did in (0, 1):
         if did in heads and teams[did] == my_team:
@@ -460,6 +460,14 @@ def execute_turn(ct, game):
         cur, cbody = n, ([n] + body if n in PEARLS else [n] + body[:-1])
         win = st.win
         while len(path) < k:
+            if L > 24:
+                # long bodies make each re-simulation costly (CPU cap): keep straight while clear
+                nxt = CTX.nb(cur)[path[-1]]
+                if nxt < 0 or nxt in st.occ or nxt not in win or any(nxt in CTX.nb(h) for h in heads.values()):
+                    break
+                path.append(path[-1])
+                cur = nxt
+                continue
             st2 = clonefeat.State(CTX, rnd, MY_ID, cbody, others, PEARLS, ct.unit_count, IS_QUEEN)
             fd2, fg2 = clonefeat.features(st2)
             ok2 = [d for d in range(4) if fd2[d][0] > 0 and CTX.nb(cur)[d] in win
