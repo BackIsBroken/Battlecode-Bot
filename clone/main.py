@@ -38,6 +38,21 @@ def kind_scores(x):
     return s
 
 
+HAS_STEPS = hasattr(clonemodel, 'STEPS_R')
+
+
+def steps_pred(x):
+    # sprint length class (0 -> 1 step ... 3 -> 4 steps), trained on the rank-1 bot's moves at length >= 5
+    k = clonemodel.STEPS_CLASSES
+    s = [0.0] * k
+    F, T, LC, RC, V = clonemodel.STEPS_F, clonemodel.STEPS_T, clonemodel.STEPS_LC, clonemodel.STEPS_RC, clonemodel.STEPS_V
+    for j, i in enumerate(clonemodel.STEPS_R):
+        while i >= 0:
+            i = LC[i] if x[F[i]] <= T[i] else RC[i]
+        s[j % k] += V[~i]
+    return max(range(k), key=s.__getitem__) + 1
+
+
 QF, QT, QL, QR, QV, QR0 = (clonequeen.DIR_F, clonequeen.DIR_T, clonequeen.DIR_LC, clonequeen.DIR_RC,
                            clonequeen.DIR_V, clonequeen.DIR_R)
 
@@ -231,6 +246,11 @@ def execute_turn(ct, game):
         if not legal:
             return
     cands = legal
+    # The rank-1 bot steps onto adjacent enemy heads (a trade): those cells are occupied, so they are
+    # not "legal" steps, but its direction model saw them as options (feature 15) and chose them.
+    attacks = [d for d in range(4) if fd[d][15] > 0] if not IS_QUEEN else []
+    if attacks:
+        cands = legal + attacks
     if IS_QUEEN:
         # The model rarely saw queen decisions; guard her like the rank-1 queen behaves:
         # never into a pocket (space), step away from adjacent enemy heads.
@@ -268,9 +288,37 @@ def execute_turn(ct, game):
         if best is None or s > best:
             best, bd = s, d
     n = CTX.nb(head)[bd]
-    HIST.append(n)
-    ct.make_move(DIRS[bd])
-    SENT['back'] = (bd + 2) % 4
+    path = [bd]
+    free = (L + 3) // 4
+    if HAS_STEPS and L >= 5 and free >= 2 and fd[bd][15] == 0:
+        k = min(free, steps_pred(fg + fd[bd] + [float(free)]))
+        cur, cbody = n, ([n] + body if n in PEARLS else [n] + body[:-1])
+        win = st.win
+        while len(path) < k:
+            st2 = clonefeat.State(CTX, rnd, MY_ID, cbody, others, PEARLS, ct.unit_count, IS_QUEEN)
+            fd2, fg2 = clonefeat.features(st2)
+            ok2 = [d for d in range(4) if fd2[d][0] > 0 and CTX.nb(cur)[d] in win
+                   and fd2[d][13] == 0 and fd2[d][10] >= (min(20, 2 * L + 6) if IS_QUEEN else min(L + 4, 14))]
+            if not ok2:
+                break
+            b2, s2 = None, None
+            for d in ok2:
+                v = dir_score(fd2[d] + fg2 + [1.0 if d == j else 0.0 for j in range(4)])
+                if s2 is None or v > s2:
+                    b2, s2 = d, v
+            nxt = CTX.nb(cur)[b2]
+            path.append(b2)
+            cbody = [nxt] + cbody if nxt in PEARLS else [nxt] + cbody[:-1]
+            cur = nxt
+    c = head
+    for d in path:
+        c = CTX.nb(c)[d]
+        HIST.append(c)
+    if len(path) == 1:
+        ct.make_move(DIRS[bd])
+    else:
+        ct.make_moves([DIRS[d] for d in path])
+    SENT['back'] = (path[-1] + 2) % 4
     SENT['ok'] = True
 
 
