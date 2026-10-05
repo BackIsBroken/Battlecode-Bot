@@ -3,3 +3,4 @@ __pycache__/
 *.replay
 *.pkl
 replays/
+.unswbc-build/
