@@ -453,6 +453,11 @@ def execute_turn(ct, game):
                 return v
             top = max(shield(d) for d in cands)
             cands = [d for d in cands if shield(d) == top]
+        # a portal can drop her outside her window onto a dragon she cannot see (real losses on
+        # Portals): only take a blind exit when nothing in view is left
+        seen = [d for d in cands if fd[d][21] > 0]
+        if seen:
+            cands = seen
         if REACH and cands:
             # v105-style hunters sprint onto the queen from 2-6 cells: a length-L dragon covers
             # ceil(L/4) free steps plus up to L-1 paid ones. Keep her head out of that reach.
