@@ -19,6 +19,8 @@ CANDS = []
 HIST = []
 MY_ID = -1
 IS_QUEEN = False
+SHIELD = True    # queen prefers cells with allies around and fewer enemy heads (rank-1 queen sits in her swarm)
+ESCORT = True    # idle dragons drift toward the queen from round 150
 PEARLS = set()
 
 
@@ -273,6 +275,21 @@ def execute_turn(ct, game):
             roomy = [d for d in cands if fd[d][10] >= min(need, L + 4)] or cands
             far = max(fd[d][11] for d in roomy)
             cands = [d for d in roomy if fd[d][11] == far]
+        if SHIELD and len(cands) > 1:
+            def shield(d):
+                n = CTX.nb(head)[d]
+                v = 0
+                for did, h in heads.items():
+                    if did == MY_ID:
+                        continue
+                    k = clonefeat.tdist(W, H, n, h)
+                    if teams[did] == my_team:
+                        v += 1 if 2 <= k <= 5 else 0
+                    elif k <= 5:
+                        v -= 2
+                return v
+            top = max(shield(d) for d in cands)
+            cands = [d for d in cands if shield(d) == top]
     else:
         qh = next((h for did, h in heads.items() if did in (0, 1) and teams[did] == my_team), None)
         if qh is not None:
@@ -283,6 +300,14 @@ def execute_turn(ct, game):
             and fg[12] == 0 and OUR_Q[2] >= L + 2):
         here = clonefeat.tdist(W, H, head, OUR_Q[0])
         if here <= 25:
+            closer = [d for d in cands if clonefeat.tdist(W, H, CTX.nb(head)[d], OUR_Q[0]) < here
+                      and fd[d][10] >= 6]
+            if closer:
+                cands = closer
+    if (ESCORT and not IS_QUEEN and rnd >= 150 and OUR_Q is not None and rnd - OUR_Q[1] <= 6
+            and fg[12] == 0 and fg[11] > 3):
+        here = clonefeat.tdist(W, H, head, OUR_Q[0])
+        if 5 < here <= 20:
             closer = [d for d in cands if clonefeat.tdist(W, H, CTX.nb(head)[d], OUR_Q[0]) < here
                       and fd[d][10] >= 6]
             if closer:
