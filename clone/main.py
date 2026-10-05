@@ -21,6 +21,7 @@ MY_ID = -1
 IS_QUEEN = False
 SHIELD = True    # queen prefers cells with allies around and fewer enemy heads (rank-1 queen sits in her swarm)
 ESCORT = True    # idle dragons drift toward the queen from round 150
+SAFE = True      # queen measures room as cells she reaches before any other head
 PEARLS = set()
 
 
@@ -57,6 +58,54 @@ def steps_pred(x):
 
 QF, QT, QL, QR, QV, QR0 = (clonequeen.DIR_F, clonequeen.DIR_T, clonequeen.DIR_LC, clonequeen.DIR_RC,
                            clonequeen.DIR_V, clonequeen.DIR_R)
+
+
+def safe_space(st, start, cap=20):
+    """Cells the queen reaches strictly before any other visible head (a Voronoi share), body
+    cells counted free once her own tail passes. Plain space counts corridors other dragons are
+    about to fill; real-game queens died boxed in that way."""
+    nb = CTX.nb
+    occ = st.occ
+    own = {c: i for i, c in enumerate(st.body)}
+    L = len(st.body)
+    other = {}
+    q = []
+    for h, did, ally, n in st.heads:
+        other[h] = 0
+        q.append(h)
+    i = 0
+    while i < len(q):
+        c = q[i]
+        i += 1
+        t = other[c]
+        if t >= 6:
+            continue
+        for n in nb(c):
+            if n >= 0 and n not in other and n not in occ:
+                other[n] = t + 1
+                q.append(n)
+    if other.get(start, 99) <= 1:
+        return 0
+    seen = {start}
+    q = [(start, 1)]
+    i = 0
+    while i < len(q) and len(seen) < cap:
+        c, t = q[i]
+        i += 1
+        for n in nb(c):
+            if n < 0 or n in seen:
+                continue
+            j = own.get(n)
+            if j is not None:
+                if L + 1 - j > t + 1:
+                    continue
+            elif n in occ:
+                continue
+            if other.get(n, 99) <= t + 1:
+                continue
+            seen.add(n)
+            q.append((n, t + 1))
+    return len(seen)
 
 
 def dir_score(x):
@@ -257,6 +306,9 @@ def execute_turn(ct, game):
         # The model rarely saw queen decisions; guard her like the rank-1 queen behaves:
         # never into a pocket (space), step away from adjacent enemy heads.
         need = min(20, max(12, 2 * L + 6))
+        if SAFE:
+            for d in legal:
+                fd[d][10] = min(fd[d][10], safe_space(st, CTX.nb(head)[d]))
         for ok in (lambda f: f[10] >= need and f[13] == 0 and f[11] >= 4,
                    lambda f: f[10] >= need and f[13] == 0 and f[11] >= 3,
                    lambda f: f[10] >= need and f[13] == 0,
