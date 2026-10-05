@@ -5,6 +5,7 @@ KIND picks move / split / suicide from window features, DIR ranks the four direc
 Features come from clonefeat.py, the same code that labelled the replays. Hard guards on top:
 never an illegal step, the queen never suicides while she can move, splits must be legal.
 """
+import gc
 import random
 import time
 import helper as unswbc
@@ -590,6 +591,8 @@ def main():
     for key, size in mapdb.SIZES.items():
         if size == (W, H):
             CANDS.append((key, mapdb.load(key)))
+    gc.disable()
+    gc.freeze()
     MY_ID = ct.head.dragon_id
     IS_QUEEN = MY_ID in (0, 1)
     while unswbc.update(ct, game):
@@ -597,6 +600,10 @@ def main():
         try:
             T0[0] = time.perf_counter_ns()
             execute_turn(ct, game)
+            # automatic cyclic GC fired at random turns and pushed them past the CPU cap:
+            # collect the young generation by hand on cheap turns instead
+            if spent() < 40_000_000:
+                gc.collect(0 if game.round_num % 100 else 1)
             if SENT.get('ok') and game.round_num >= ESCORT_FROM - 10:
                 broadcast(ct, game.round_num, ct.head.team.value, SENT.get('back', -1))
         except Exception as e:
