@@ -19,9 +19,12 @@ CANDS = []
 HIST = []
 MY_ID = -1
 IS_QUEEN = False
-SHIELD = True    # queen prefers cells with allies around and fewer enemy heads (rank-1 queen sits in her swarm)
+SHIELD = False   # queen prefers cells with allies around and fewer enemy heads (rank-1 queen sits in her swarm)
 ESCORT = True    # idle dragons drift toward the queen from round 150
 SAFE = True      # queen measures room as cells she reaches before any other head
+QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1: 11 cells out at r50-99, 7 by r150)
+HOME = None
+HOMED = None
 PEARLS = set()
 
 
@@ -246,7 +249,9 @@ def execute_turn(ct, game):
         if ish == '1':
             heads[did] = c
 
-    global OUR_Q
+    global OUR_Q, HOME, HOMED
+    if IS_QUEEN and HOME is None:
+        HOME = head
     read_sonar(ct, rnd, my_team)
     for did in (0, 1):
         if did in heads and teams[did] == my_team:
@@ -285,8 +290,10 @@ def execute_turn(ct, game):
     if kind == 2 and (not IS_QUEEN or not legal):
         return   # suicide: the rank-1 bot dies here rather than crash, or to feed a long ally
     crowded = any(clonefeat.tdist(W, H, head, h) <= 3 for did, h in heads.items() if did != MY_ID)
-    if kind == 1 and IS_QUEEN and legal and crowded:
-        kind = 0   # her children spawn beside her: only split with room
+    if kind == 1 and IS_QUEEN and legal and crowded and rnd >= 50:
+        kind = 0   # her children spawn beside her: only split with room (the rank-1 queen splits freely early)
+    if rnd < 50 and L >= 5 and legal and kind == 0:
+        kind = 1   # rank-1: 86-95% of length >= 5 turns before round 50 are splits (colony bootstrap)
     if kind == 1 or not legal:
         if L >= 4 and ct.unit_count < ct.unit_limit:
             # trapped: the queen sheds two tail segments at a time (her tail frees), others keep the tail
@@ -342,6 +349,23 @@ def execute_turn(ct, game):
                 return v
             top = max(shield(d) for d in cands)
             cands = [d for d in cands if shield(d) == top]
+        if QHOME and rnd >= 100 and fg[11] > 4 and HOME is not None and len(CANDS) <= 1:
+            if HOMED is None:
+                HOMED = {HOME: 0}
+                q = [HOME]
+                i = 0
+                while i < len(q):
+                    c = q[i]
+                    i += 1
+                    for n2 in CTX.nb(c):
+                        if n2 >= 0 and n2 not in HOMED:
+                            HOMED[n2] = HOMED[c] + 1
+                            q.append(n2)
+            here = HOMED.get(head, 0)
+            if here > 6:
+                closer = [d for d in cands if HOMED.get(CTX.nb(head)[d], 99) < here]
+                if closer:
+                    cands = closer
     else:
         qh = next((h for did, h in heads.items() if did in (0, 1) and teams[did] == my_team), None)
         if qh is not None:
