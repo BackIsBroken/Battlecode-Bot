@@ -16,6 +16,8 @@ import mapdb
 # ---------------------------------------------------------------- tuning
 SPLIT_LEN = 4            # split as soon as a dragon reaches this length
 QUEEN_SPLIT_UNTIL = 100  # the queen stops splitting from this round
+QUEEN_GROW_FROM = 240    # ... and stays small and agile (barely eating) until this one
+QUEEN_EARLY_APPETITE = 0.15
 FEED_FROM = 200          # short dragons start feeding longer allies
 FEED_DIST = 3            # ... when their heads are this close
 FEED_MAX_LEN = 3         # ... and they are at most this long
@@ -54,6 +56,7 @@ MY_TEAM = 'A'
 HOME = None              # the queen's first head cell
 OUR_Q = None             # where our queen was last reported
 THEIR_Q = None           # where their queen was last seen
+BIG = None               # our longest dragon heard of (cell, round, length)
 OUT = {}                 # this turn's broadcast state, filled by execute_turn
 KEY = {'A': 0x5DEECE66D1F3A7B9, 'B': 0x2545F4914F6CDD1D}
 MASK64 = (1 << 64) - 1
@@ -80,7 +83,7 @@ def unpack(msg):
 
 
 def read_sonar(ct, rnd):
-    global OUR_Q, THEIR_Q
+    global OUR_Q, THEIR_Q, BIG
     msgs = ct.sonar_messages
     if len(msgs) > 24:
         msgs = msgs[-24:]
@@ -96,6 +99,14 @@ def read_sonar(ct, rnd):
             OUR_Q = (cell, r, length)
         elif kind == 2 and (THEIR_Q is None or r > THEIR_Q[1]):
             THEIR_Q = (cell, r, length)
+        elif kind == 3:
+            take_big((cell, r, length), rnd)
+
+
+def take_big(b, rnd):
+    global BIG
+    if BIG is None or rnd - BIG[1] > 6 or b[2] > BIG[2] or (b[2] == BIG[2] and b[1] > BIG[1]):
+        BIG = b
 
 
 def broadcast(ct, rnd):
@@ -106,6 +117,8 @@ def broadcast(ct, rnd):
         msgs.append(pack(1, OUR_Q[0], OUR_Q[1], OUR_Q[2]))
     if THEIR_Q is not None and rnd - THEIR_Q[1] <= 6:
         msgs.append(pack(2, THEIR_Q[0], THEIR_Q[1], THEIR_Q[2]))
+    if BIG is not None and rnd - BIG[1] <= 4 and rnd >= 300:
+        msgs.append(pack(3, BIG[0], BIG[1], BIG[2]))
     if not msgs:
         return
     back = OUT.get('back', -1)
@@ -300,6 +313,11 @@ def execute_turn(ct, game):
             OUR_Q = (h, rnd, Lq)
         else:
             THEIR_Q = (h, rnd, Lq)
+    if L >= 8:
+        take_big((head, rnd, L), rnd)
+    for did, h in heads.items():
+        if teams[did] == my_team and did != MY_ID and len(parts[did]) >= 8:
+            take_big((h, rnd, len(parts[did])), rnd)
     if IS_QUEEN:
         OUR_Q = (head, rnd, L)
         global HOME
@@ -439,11 +457,16 @@ def execute_turn(ct, game):
 
     def space_score(start, t0):
         # penalty for a head position with too little room; the queen also checks its own coils
-        need = min(40, max(16, 2 * L + 6)) if IS_QUEEN else min(SPACE_CAP, L + 4)
+        if IS_QUEEN:
+            need = min(40, max(16, 2 * L + 6))
+        elif L >= 6:
+            need = min(30, 2 * L + 4)    # long dragons coil into their own traps
+        else:
+            need = min(SPACE_CAP, L + 4)
         sp = space(start, t0, need)
         pen = 0.0
         if sp < need:
-            food = 0 if IS_QUEEN or not can_split else pocket_food(start, t0)
+            food = 0 if IS_QUEEN or not can_split or L > 5 else pocket_food(start, t0)
             if food >= 2 and L + food >= 4 and rnd < 490:
                 pen += 4.0      # pocket farm: eat, then split the tail out (the head part dies)
             else:
@@ -499,7 +522,8 @@ def execute_turn(ct, game):
             d = tdist(head, h)
             is_q = did == my_q
             if rnd >= LATE_FEED_FROM:
-                ok = d <= FEED_DIST + 1 and Lj >= L + 3 and (L <= 6 or Lj >= 2 * L)
+                # death drops every other segment: only short (or odd) dragons feed efficiently
+                ok = d <= FEED_DIST + 2 and Lj >= L + 3 and (L <= 3 or L == 5)
             else:
                 # rare before the late game: the rank-1 bot makes ~40 deliberate feeds per game
                 ok = (d <= FEED_DIST and L <= FEED_MAX_LEN and ct.unit_count >= 16 and
@@ -684,26 +708,29 @@ def execute_turn(ct, game):
         if OUR_Q is not None and rnd - OUR_Q[1] <= 8 and OUR_Q[0] != head:
             g = OUR_Q[0]
             dq = tdist(head, g)
-            feeder = rnd >= FEED_FROM and L <= FEED_MAX_LEN + (3 if rnd >= LATE_FEED_FROM else 0)
+            feeder = rnd >= FEED_FROM and L <= FEED_MAX_LEN + (2 if rnd >= LATE_FEED_FROM else 0)
             if not feeder:
                 if dq <= 3:
                     for dd in legal:
                         if tdist(my_nb[dd], g) > dq:
                             goal_bonus[dd] += 3.0
-            elif L <= FEED_MAX_LEN + (3 if rnd >= LATE_FEED_FROM else 0) and OUR_Q[2] > L + 1:
+            elif L <= FEED_MAX_LEN + (2 if rnd >= LATE_FEED_FROM else 0) and OUR_Q[2] > L + 1:
                 if rnd >= LATE_FEED_FROM and dq <= 30:
                     pull(g, 4.0)
                 elif dq <= 14 and (MY_ID % 3 == 0 or dq <= 6):
                     pull(g, 2.0)
+        elif (rnd >= LATE_FEED_FROM - 20 and BIG is not None and rnd - BIG[1] <= 8 and
+              BIG[2] >= 2 * L + 2 and BIG[0] != head and tdist(head, BIG[0]) <= 30):
+            pull(BIG[0], 4.0)   # no live queen heard of: build the longest dragon instead
 
     # ------------------------------------------------ score first steps
     qh = heads.get(my_q) if my_q is not None and not IS_QUEEN else None
-    feeding_ok = rnd >= FEED_FROM and L <= FEED_MAX_LEN + (3 if rnd >= LATE_FEED_FROM else 0)
+    feeding_ok = rnd >= FEED_FROM and L <= FEED_MAX_LEN + (2 if rnd >= LATE_FEED_FROM else 0)
     scores = {}
     dbg = []
     for d in legal:
         n = my_nb[d]
-        s = best_dir[d] * 10.0 + goal_bonus[d]
+        s = best_dir[d] * (10.0 * QUEEN_EARLY_APPETITE if IS_QUEEN and rnd < QUEEN_GROW_FROM else 10.0) + goal_bonus[d]
         dg = danger.get(n)
         if dg is not None:
             w, Le, did = dg
