@@ -25,6 +25,7 @@ ESCORT = True    # idle dragons drift toward the queen from round 150
 SAFE = True      # queen measures room as cells she reaches before any enemy head
 QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1: 11 cells out at r50-99, 7 by r150)
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
+SPLIT_BIAS = 2.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
 CHAMPS = True    # feed a champion once the queen is gone
 REACH = True     # queen keeps her head beyond visible enemies' sprint reach
 ATTACK_RATES = {1: (0.68, 0.37, 0.0), 2: (0.68, 0.37, 0.0), 3: (0.79, 0.63, 0.31), 4: (0.31, 0.10, 0.03),
@@ -343,6 +344,8 @@ def execute_turn(ct, game):
 
     xk = fg + [v for f in fd for v in f]
     ks = kind_scores(xk)
+    if not IS_QUEEN and rnd >= 100:
+        ks[1] -= SPLIT_BIAS
     kind = max(range(len(ks)), key=ks.__getitem__)
 
     # feeding (rank-1: short dragons 2-3 cells from a much longer ally suicide so it eats the drops)
