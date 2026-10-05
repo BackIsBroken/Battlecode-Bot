@@ -40,7 +40,8 @@ class Game:
                 _, i, f, head, tail = e
                 b = alive.get(i)
                 if b is None: continue
-                b.insert(0, head)
+                if b[0] != head:   # the opening update repeats the spawn head; inserting it again made L one too long
+                    b.insert(0, head)
                 while len(b) > 1 and b[-1] != tail: b.pop()
             elif k == 'split':
                 _, p, c, t, f, pb, cb_ = e

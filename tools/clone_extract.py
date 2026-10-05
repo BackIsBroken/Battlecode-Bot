@@ -24,6 +24,20 @@ def bundled(name):
 
 
 def auto_team(g):
+    """The rank-1 side: its sonar payload carries the sender id at bits 38-49 (>90% of messages,
+    ~0% for other bots). Fallback: the first side to suicide (other bots now suicide too)."""
+    hit, n = {'A': 0, 'B': 0}, {'A': 0, 'B': 0}
+    tm = dict(g.team)
+    for e in g.r['events']:
+        if e[0] == 'split':
+            tm[e[2]] = e[3]
+        elif e[0] == 'sonar' and e[1] in tm:
+            t = tm[e[1]]
+            n[t] += 1
+            hit[t] += (e[3] >> 38) & 4095 == e[1]
+    sc = {t: hit[t] / n[t] for t in 'AB' if n[t] >= 20}
+    if sc and max(sc.values()) > 0.5:
+        return max(sc, key=sc.get)
     team = dict(g.team)
     for e in g.r['events']:
         if e[0] == 'split':

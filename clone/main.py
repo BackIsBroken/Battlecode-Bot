@@ -5,6 +5,7 @@ KIND picks move / split / suicide from window features, DIR ranks the four direc
 Features come from clonefeat.py, the same code that labelled the replays. Hard guards on top:
 never an illegal step, the queen never suicides while she can move, splits must be legal.
 """
+import random
 import helper as unswbc
 from helper import Direction
 import mapdb
@@ -24,6 +25,9 @@ ESCORT = True    # idle dragons drift toward the queen from round 150
 SAFE = True      # queen measures room as cells she reaches before any enemy head
 QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1: 11 cells out at r50-99, 7 by r150)
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
+ATTACK_RATES = {1: (0.68, 0.37, 0.0), 2: (0.68, 0.37, 0.0), 3: (0.79, 0.63, 0.31), 4: (0.31, 0.10, 0.03),
+                5: (0.07, 0.0, 0.03)}
+SPRINT_ATTACK = {2: (0.02, 0.0, 0.0), 3: (0.43, 0.24, 0.22), 4: (0.25, 0.16, 0.09)}
 HOME = None
 HOMED = None
 PEARLS = set()
@@ -289,13 +293,52 @@ def execute_turn(ct, game):
         dq = clonefeat.tdist(W, H, head, OUR_Q[0])
         if OUR_Q[2] >= L + 1 and dq <= (4 if rnd >= 420 else 3) and (rnd >= 420 or ct.unit_count >= 12):
             return
+    attacks = [d for d in range(4) if fd[d][15] > 0] if not IS_QUEEN else []
+    if attacks and ATTACK_RATES:
+        # rank-1 head trades, measured over 121 games: attack rate by own length and the
+        # target's length (longer / equal / shorter than us)
+        def tlen(d):
+            n = CTX.nb(head)[d]
+            return max((len(parts[did]) for did, h in heads.items() if h == n and teams[did] != my_team), default=0)
+        ad = max(attacks, key=tlen)
+        tl = tlen(ad)
+        rate = ATTACK_RATES[min(L, 5)][0 if tl > L else (1 if tl == L else 2)]
+        if random.random() < rate:
+            HIST.append(CTX.nb(head)[ad])
+            ct.make_move(DIRS[ad])
+            SENT['back'] = (ad + 2) % 4
+            SENT['ok'] = True
+            return
+        attacks = []
+    elif SPRINT_ATTACK and not IS_QUEEN and 2 <= L <= 4:
+        # rank-1 length 3-4 dragons pay a segment to sprint onto an enemy head two cells away
+        eh = {h: len(parts[did]) for did, h in heads.items() if teams[did] != my_team}
+        tg = []
+        for d1 in range(4):
+            m = CTX.nb(head)[d1]
+            if m < 0 or m in st.occ:
+                continue
+            for d2 in range(4):
+                n2 = CTX.nb(m)[d2]
+                if n2 in eh:
+                    tg.append((eh[n2], d1, d2, m, n2))
+        if tg:
+            tl, d1, d2, m, n2 = max(tg)
+            rate = SPRINT_ATTACK[L][0 if tl > L else (1 if tl == L else 2)]
+            if random.random() < rate:
+                HIST.append(m)
+                HIST.append(n2)
+                ct.make_moves([DIRS[d1], DIRS[d2]])
+                SENT['back'] = (d2 + 2) % 4
+                SENT['ok'] = True
+                return
     if kind == 2 and (not IS_QUEEN or not legal):
         return   # suicide: the rank-1 bot dies here rather than crash, or to feed a long ally
     crowded = any(clonefeat.tdist(W, H, head, h) <= 3 for did, h in heads.items() if did != MY_ID)
     if kind == 1 and IS_QUEEN and legal and crowded and rnd >= 50:
         kind = 0   # her children spawn beside her: only split with room (the rank-1 queen splits freely early)
-    if rnd < 50 and L >= 5 and legal and kind == 0:
-        kind = 1   # rank-1: 86-95% of length >= 5 turns before round 50 are splits (colony bootstrap)
+    if rnd < 50 and L >= 4 and IS_QUEEN and legal and kind == 0:
+        kind = 1   # rank-1 queen: 87% of her length-4 turns before round 50 are splits (colony bootstrap)
     if kind == 1 or not legal:
         if L >= 4 and ct.unit_count < ct.unit_limit:
             # trapped: the queen sheds two tail segments at a time (her tail frees), others keep the tail
@@ -308,7 +351,6 @@ def execute_turn(ct, game):
     cands = legal
     # The rank-1 bot steps onto adjacent enemy heads (a trade): those cells are occupied, so they are
     # not "legal" steps, but its direction model saw them as options (feature 15) and chose them.
-    attacks = [d for d in range(4) if fd[d][15] > 0] if not IS_QUEEN else []
     if attacks:
         cands = legal + attacks
     if IS_QUEEN:
