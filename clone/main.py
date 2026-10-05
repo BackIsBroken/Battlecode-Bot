@@ -117,6 +117,29 @@ def safe_space(st, start, cap=20):
     return len(seen)
 
 
+HOMEQ = [None, 0]   # BFS queue from the queen's spawn, read position
+
+
+def home_bfs(budget):
+    global HOMED
+    if HOMED is None:
+        HOMED = {HOME: 0}
+        HOMEQ[0] = [HOME]
+        HOMEQ[1] = 0
+    q, i = HOMEQ[0], HOMEQ[1]
+    end = i + budget
+    while i < len(q) and i < end:
+        c = q[i]
+        i += 1
+        for n2 in CTX.nb(c):
+            if n2 >= 0 and n2 not in HOMED:
+                HOMED[n2] = HOMED[c] + 1
+                q.append(n2)
+    HOMEQ[1] = i
+    if i >= len(q):
+        HOMEQ[0] = None
+
+
 def dir_score(x):
     # the queen has her own direction model, trained on the rank-1 queen's ~30k decisions
     if IS_QUEEN:
@@ -258,6 +281,8 @@ def execute_turn(ct, game):
     global OUR_Q, HOME, HOMED
     if IS_QUEEN and HOME is None:
         HOME = head
+    if QHOME and IS_QUEEN and CTX is not None and len(CANDS) <= 1 and (HOMED is None or HOMEQ[0]):
+        home_bfs(400)   # spread over the early turns: a whole-map BFS in one turn broke the CPU cap
     read_sonar(ct, rnd, my_team)
     for did in (0, 1):
         if did in heads and teams[did] == my_team:
@@ -393,18 +418,7 @@ def execute_turn(ct, game):
                 return v
             top = max(shield(d) for d in cands)
             cands = [d for d in cands if shield(d) == top]
-        if QHOME and rnd >= 100 and fg[11] > 4 and HOME is not None and len(CANDS) <= 1:
-            if HOMED is None:
-                HOMED = {HOME: 0}
-                q = [HOME]
-                i = 0
-                while i < len(q):
-                    c = q[i]
-                    i += 1
-                    for n2 in CTX.nb(c):
-                        if n2 >= 0 and n2 not in HOMED:
-                            HOMED[n2] = HOMED[c] + 1
-                            q.append(n2)
+        if QHOME and rnd >= 100 and fg[11] > 4 and HOMED is not None and not HOMEQ[0]:
             here = HOMED.get(head, 0)
             if here > 6:
                 closer = [d for d in cands if HOMED.get(CTX.nb(head)[d], 99) < here]
@@ -433,7 +447,7 @@ def execute_turn(ct, game):
             if closer:
                 cands = closer
     best, bd = None, cands[0]
-    for d in cands:
+    for d in (cands if len(cands) > 1 else ()):
         x = fd[d] + fg + [1.0 if d == j else 0.0 for j in range(4)]
         s = dir_score(x)
         if best is None or s > best:
@@ -452,8 +466,8 @@ def execute_turn(ct, game):
                    and fd2[d][13] == 0 and fd2[d][10] >= (min(20, 2 * L + 6) if IS_QUEEN else min(L + 4, 14))]
             if not ok2:
                 break
-            b2, s2 = None, None
-            for d in ok2:
+            b2, s2 = ok2[0], None
+            for d in (ok2 if len(ok2) > 1 else ()):
                 v = dir_score(fd2[d] + fg2 + [1.0 if d == j else 0.0 for j in range(4)])
                 if s2 is None or v > s2:
                     b2, s2 = d, v

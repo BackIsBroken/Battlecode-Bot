@@ -32,7 +32,7 @@ def load(fs):
 Xtr, ytr = load([f for f in files if f not in test_files])
 Xte, yte = load([f for f in files if f in test_files])
 print('train', len(ytr), 'test', len(yte), 'class shares', np.bincount(yte) / len(yte))
-m = lgb.LGBMClassifier(n_estimators=int(os.environ.get('ST', 60)), num_leaves=31, learning_rate=0.1,
+m = lgb.LGBMClassifier(n_estimators=int(os.environ.get('ST', 60)), num_leaves=int(os.environ.get('NL', 31)), learning_rate=float(os.environ.get('LR', 0.1)),
                        min_child_samples=50, verbose=-1)
 m.fit(Xtr, ytr)
 p = m.predict(Xte)

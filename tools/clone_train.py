@@ -49,7 +49,7 @@ def dir_xy(t):
 
 Xk, yk = kind_xy(tr)
 Xkt, ykt = kind_xy(te)
-mk = lgb.LGBMClassifier(n_estimators=int(os.environ.get('KT', 120)), num_leaves=31, learning_rate=0.1,
+mk = lgb.LGBMClassifier(n_estimators=int(os.environ.get('KT', 120)), num_leaves=int(os.environ.get('NL', 31)), learning_rate=float(os.environ.get('LR', 0.1)),
                         min_child_samples=50, verbose=-1)
 mk.fit(Xk, yk)
 pk = mk.predict(Xkt)
@@ -60,7 +60,7 @@ for c in (1, 2):
 
 Xd, yd, nd, _ = dir_xy(tr)
 Xdt, ydt, ndt, Yt = dir_xy(te)
-md = lgb.LGBMRanker(n_estimators=int(os.environ.get('DT', 150)), num_leaves=31, learning_rate=0.1,
+md = lgb.LGBMRanker(n_estimators=int(os.environ.get('DT', 150)), num_leaves=int(os.environ.get('NL', 31)), learning_rate=float(os.environ.get('LR', 0.1)),
                     min_child_samples=50, verbose=-1)
 md.fit(Xd, yd, group=[4] * nd)
 sc = md.predict(Xdt).reshape(ndt, 4)
