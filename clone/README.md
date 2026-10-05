@@ -15,4 +15,4 @@ short dragons drift toward her and suicide 3 cells away (4 from round 420) so sh
 
 Local: 28.5-31 wins of 68 against v105 (17 maps x 2 seeds x both sides). Wins small maps by
 elimination like the rank-1 bot (Devil, Autarky, Trophy, Dilemma); loses most big maps.
-Metered sandbox: p50 ~31M, p99 ~70-77M points per turn (limit 100M). Models: 120-tree kind, 60-tree direction (274 rank-1 games).
+Metered sandbox (UNSW, Slithery Fight): p50 ~30M, p99 ~65M, max ~78M points per turn (limit 100M); a budget guard reads the sandbox clock. Models: 120-tree kind, 60-tree direction, trained on 368 rank-1 games.
