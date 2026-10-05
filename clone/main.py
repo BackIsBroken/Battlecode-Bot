@@ -25,6 +25,7 @@ ESCORT = True    # idle dragons drift toward the queen from round 150
 SAFE = True      # queen measures room as cells she reaches before any enemy head
 QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1: 11 cells out at r50-99, 7 by r150)
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
+REACH = True     # queen keeps her head beyond visible enemies' sprint reach
 ATTACK_RATES = {1: (0.68, 0.37, 0.0), 2: (0.68, 0.37, 0.0), 3: (0.79, 0.63, 0.31), 4: (0.31, 0.10, 0.03),
                 5: (0.07, 0.0, 0.03)}
 SPRINT_ATTACK = {2: (0.02, 0.0, 0.0), 3: (0.43, 0.24, 0.22), 4: (0.25, 0.16, 0.09)}
@@ -418,6 +419,38 @@ def execute_turn(ct, game):
                 return v
             top = max(shield(d) for d in cands)
             cands = [d for d in cands if shield(d) == top]
+        if REACH and cands:
+            # v105-style hunters sprint onto the queen from 2-6 cells: a length-L dragon covers
+            # ceil(L/4) free steps plus up to L-1 paid ones. Keep her head out of that reach.
+            hunters = []
+            for did, h in heads.items():
+                if teams[did] == my_team:
+                    continue
+                ln = len(parts[did])
+                reach = min((ln + 3) // 4 + ln - 1, 8)
+                dist = {h: 0}
+                q = [h]
+                i = 0
+                while i < len(q):
+                    c = q[i]
+                    i += 1
+                    if dist[c] >= reach:
+                        continue
+                    for n2 in CTX.nb(c):
+                        if n2 >= 0 and n2 not in dist and n2 not in st.occ:
+                            dist[n2] = dist[c] + 1
+                            q.append(n2)
+                hunters.append((dist, reach))
+            if hunters:
+                def margin(d):
+                    n2 = CTX.nb(head)[d]
+                    return min(dist.get(n2, 99) - reach for dist, reach in hunters)
+                safe = [d for d in cands if margin(d) >= 1]
+                if safe:
+                    cands = safe
+                else:
+                    top = max(margin(d) for d in cands)
+                    cands = [d for d in cands if margin(d) == top]
         if QHOME and rnd >= 100 and fg[11] > 4 and HOMED is not None and not HOMEQ[0]:
             here = HOMED.get(head, 0)
             if here > 6:
