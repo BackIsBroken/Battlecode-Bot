@@ -566,7 +566,7 @@ def execute_turn(ct, game):
         cur, cbody = n, ([n] + body if n in PEARLS else [n] + body[:-1])
         win = st.win
         while len(path) < k and spent() < 45_000_000:
-            if L > 12 or len(path) >= 3:
+            if L > 24:
                 # long bodies make each re-simulation costly (CPU cap): keep straight while clear
                 nxt = CTX.nb(cur)[path[-1]]
                 if nxt < 0 or nxt in st.occ or nxt not in win or any(nxt in CTX.nb(h) for h in heads.values()):
