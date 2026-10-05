@@ -21,6 +21,27 @@ for f in files:
         t[k].append(z[k])
 tr = {k: np.concatenate(v) for k, v in tr.items()}
 te = {k: np.concatenate(v) for k, v in te.items()}
+
+
+def mirror(t, axis, sel):
+    """Reflect the chosen samples east-west (axis 'ew') or north-south ('ns'): the direction axis
+    and move labels permute, and the relative left/right flags (features 3 and 4) swap.
+    The rank-1 bot was side B in 91% of replays; without this the models learned its compass
+    habits ("head west") and a clone playing side A drifted back to its own wall."""
+    perm = [0, 3, 2, 1] if axis == 'ew' else [2, 1, 0, 3]
+    D = t['D'][sel][:, perm, :]
+    D[:, :, [3, 4]] = D[:, :, [4, 3]]
+    t['D'][sel] = D
+    Y = t['Y'][sel]
+    mv = Y < 4
+    Y[mv] = np.array(perm, np.int8)[Y[mv]]
+    t['Y'][sel] = Y
+
+
+if os.environ.get('AUG'):
+    arng = np.random.RandomState(7)
+    for axis in ('ew', 'ns'):
+        mirror(tr, axis, np.nonzero(arng.rand(len(tr['Y'])) < 0.5)[0])
 if os.environ.get('QUEEN'):
     # queen-only models: the colony model saw one queen decision in ~40
     for t in (tr, te):
