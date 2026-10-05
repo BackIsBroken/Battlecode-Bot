@@ -36,8 +36,10 @@ def kind_xy(t):
     return X, y
 
 
-def dir_xy(t):
+def dir_xy(t, sub=1.0):
     m = t['Y'] < 4
+    if sub < 1.0:   # memory: the ranker expands every move into 4 rows
+        m &= np.random.RandomState(1).rand(len(m)) < sub
     D, G, Y = t['D'][m], t['G'][m], t['Y'][m]
     n = len(Y)
     rows = np.concatenate([D.reshape(n * 4, -1), np.repeat(G, 4, axis=0),
@@ -58,7 +60,7 @@ for c in (1, 2):
     sel = ykt == c
     print('  class %d recall %.3f precision %.3f' % (c, (pk[sel] == c).mean(), (ykt[pk == c] == c).mean() if (pk == c).any() else 0))
 
-Xd, yd, nd, _ = dir_xy(tr)
+Xd, yd, nd, _ = dir_xy(tr, float(os.environ.get('DSUB', 1.0)))
 Xdt, ydt, ndt, Yt = dir_xy(te)
 md = lgb.LGBMRanker(n_estimators=int(os.environ.get('DT', 150)), num_leaves=int(os.environ.get('NL', 31)), learning_rate=float(os.environ.get('LR', 0.1)),
                     min_child_samples=50, verbose=-1)
