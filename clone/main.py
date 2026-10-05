@@ -30,6 +30,7 @@ QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
 SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
 CHAMPS = False    # feed a champion once the queen is gone
+ESC = True       # queen keeps two exits other heads cannot reach next turn
 QD_FEED = 0.0    # suicide-score boost next to a long ally once the queen is gone
 BLIND = False    # queen avoids portal exits outside her window
 REACH = False     # queen keeps her head beyond visible enemies' sprint reach
@@ -469,6 +470,23 @@ def execute_turn(ct, game):
                 return v
             top = max(shield(d) for d in cands)
             cands = [d for d in cands if shield(d) == top]
+        if ESC and len(cands) > 1:
+            # one-step lookahead: keep exits no other head can take next turn (boxed-in queens
+            # were our most common loss)
+            ohn = set()
+            for did, h in heads.items():
+                if did != MY_ID:
+                    ohn.update(CTX.nb(h))
+            tail = set(body[-2:]) if L >= 3 else set(body[-1:])
+            def exits(d):
+                n2 = CTX.nb(head)[d]
+                return sum(1 for m in CTX.nb(n2) if m >= 0 and m != head and m not in ohn
+                           and (m not in st.occ or m in tail))
+            for need_e in (2, 1):
+                sel = [d for d in cands if exits(d) >= need_e]
+                if sel:
+                    cands = sel
+                    break
         # a portal can drop her outside her window onto a dragon she cannot see (real losses on
         # Portals): only take a blind exit when nothing in view is left
         seen = [d for d in cands if fd[d][21] > 0] if BLIND else []
