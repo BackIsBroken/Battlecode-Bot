@@ -30,8 +30,8 @@ QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
 SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
 CHAMPS = False    # feed a champion once the queen is gone
-QD_FEED = 0.8    # suicide-score boost next to a long ally once the queen is gone
-BLIND = True     # queen avoids portal exits outside her window
+QD_FEED = 0.0    # suicide-score boost next to a long ally once the queen is gone
+BLIND = False    # queen avoids portal exits outside her window
 REACH = False     # queen keeps her head beyond visible enemies' sprint reach
 ATTACK_RATES = {1: (0.68, 0.37, 0.0), 2: (0.68, 0.37, 0.0), 3: (0.79, 0.63, 0.31), 4: (0.31, 0.10, 0.03),
                 5: (0.07, 0.0, 0.03)}
