@@ -33,16 +33,16 @@ SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often 
 CHAMPS = False    # feed a champion once the queen is gone
 LOCAL_ODDS = False  # scale head-trade rates by local head count
 NO_EARLY_SUICIDE = 0  # round before which legal dragons never choose suicide (0 = off)
-FORCE_SPLIT = 0  # round until which non-queen dragons always split at length >= 4 (0 = off)
+FORCE_SPLIT = 250 # round until which non-queen dragons always split at length >= 4 (0 = off)
 GREEDY = False   # always take the shortest path to the nearest visible pearl
 GREEDY_QUEEN = False
-OPEN_RUSH = True # opening: head for the rank-1 bot's learned opening positions on this map
+OPEN_RUSH = False # opening: head for the rank-1 bot's learned opening positions on this map
 OPEN_UNTIL = 60
 OPEN_FORCE = True  # keep heading for the opening spots even with pearls in view (rank-1 holds the fields)
 OPEN_MAX_AREA = 1000  # small maps only: on big maps the learned targets just scatter the colony
 RUSH = False     # opening: head straight for the nearest fountain while no pearl is in view
 RUSH_UNTIL = 40
-FARM = True      # walk to pearl fountains (beds refilling every ~1-3 rounds) and circle them
+FARM = False     # walk to pearl fountains (beds refilling every ~1-3 rounds) and circle them
 FARM_UNTIL = 400
 FARM_RADIUS = 6
 FOUNT = None
