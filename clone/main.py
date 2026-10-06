@@ -33,7 +33,7 @@ SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often 
 CHAMPS = False    # feed a champion once the queen is gone
 NO_EARLY_SUICIDE = 0  # round before which legal dragons never choose suicide (0 = off)
 FORCE_SPLIT = 0  # round until which non-queen dragons always split at length >= 4 (0 = off)
-GREEDY = True    # always take the shortest path to the nearest visible pearl
+GREEDY = False   # always take the shortest path to the nearest visible pearl
 GREEDY_QUEEN = False
 OPEN_RUSH = True # opening: head for the rank-1 bot's learned opening positions on this map
 OPEN_UNTIL = 60
