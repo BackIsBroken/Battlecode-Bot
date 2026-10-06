@@ -31,6 +31,8 @@ QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
 SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
 CHAMPS = False    # feed a champion once the queen is gone
+GREEDY = True    # always take the shortest path to the nearest visible pearl
+GREEDY_QUEEN = False
 OPEN_RUSH = True # opening: head for the rank-1 bot's learned opening positions on this map
 OPEN_UNTIL = 60
 OPEN_FORCE = True  # keep heading for the opening spots even with pearls in view (rank-1 holds the fields)
@@ -635,6 +637,14 @@ def execute_turn(ct, game):
                       and fd[d][10] >= 6]
             if closer:
                 cands = closer
+    if GREEDY and fg[12] > 0 and len(cands) > 1 and (not IS_QUEEN or GREEDY_QUEEN):
+        # Rank-1 (and so the plain clone) moves toward a visible pearl only ~53% of the time; its
+        # edge is volume, not skill. Take the shortest path to the nearest pearl (feature 8 is the
+        # BFS pearl distance through that step, 0 when the step itself eats one); the model only
+        # breaks ties.
+        bestp = min(fd[d][8] for d in cands)
+        if bestp < 10:
+            cands = [d for d in cands if fd[d][8] == bestp]
     best, bd = None, cands[0]
     for d in (cands if len(cands) > 1 else ()):
         x = fd[d] + fg + [1.0 if d == j else 0.0 for j in range(4)]
