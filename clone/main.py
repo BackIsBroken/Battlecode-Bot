@@ -31,6 +31,7 @@ QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
 SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
 CHAMPS = False    # feed a champion once the queen is gone
+NO_EARLY_SUICIDE = 0  # round before which legal dragons never choose suicide (0 = off)
 FORCE_SPLIT = 0  # round until which non-queen dragons always split at length >= 4 (0 = off)
 GREEDY = True    # always take the shortest path to the nearest visible pearl
 GREEDY_QUEEN = False
@@ -457,6 +458,8 @@ def execute_turn(ct, game):
                 SENT['back'] = (d2 + 2) % 4
                 SENT['ok'] = True
                 return
+    if kind == 2 and legal and rnd < NO_EARLY_SUICIDE:
+        kind = 0   # economy: early suicides only throw a dragon away (feeding starts later)
     if kind == 2 and (not IS_QUEEN or not legal):
         return   # suicide: the rank-1 bot dies here rather than crash, or to feed a long ally
     crowded = any(clonefeat.tdist(W, H, head, h) <= 3 for did, h in heads.items() if did != MY_ID)
