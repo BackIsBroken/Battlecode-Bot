@@ -33,6 +33,7 @@ SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often 
 CHAMPS = False    # feed a champion once the queen is gone
 OPEN_RUSH = True # opening: head for the rank-1 bot's learned opening positions on this map
 OPEN_UNTIL = 40
+OPEN_MAX_AREA = 1000  # small maps only: on big maps the learned targets just scatter the colony
 RUSH = False     # opening: head straight for the nearest fountain while no pearl is in view
 RUSH_UNTIL = 40
 FARM = False     # walk to pearl fountains (beds refilling every ~1-3 rounds) and circle them
@@ -587,7 +588,7 @@ def execute_turn(ct, game):
                       and fd[d][10] >= 6]
             if closer:
                 cands = closer
-    if OPEN_RUSH and not IS_QUEEN and rnd < OPEN_UNTIL and fg[12] == 0 and len(CANDS) <= 1:
+    if OPEN_RUSH and not IS_QUEEN and rnd < OPEN_UNTIL and W * H <= OPEN_MAX_AREA and fg[12] == 0 and len(CANDS) <= 1:
         # opening race: walk to where the rank-1 bot's dragons stand in rounds 10-40 on this map
         # (learned from its replays, mirrored to our side); it wins the pearl fields that way
         od = open_dist()
