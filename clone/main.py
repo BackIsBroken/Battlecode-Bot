@@ -31,6 +31,7 @@ QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
 SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
 CHAMPS = False    # feed a champion once the queen is gone
+LOCAL_ODDS = False  # scale head-trade rates by local head count
 NO_EARLY_SUICIDE = 0  # round before which legal dragons never choose suicide (0 = off)
 FORCE_SPLIT = 0  # round until which non-queen dragons always split at length >= 4 (0 = off)
 GREEDY = False   # always take the shortest path to the nearest visible pearl
@@ -429,6 +430,11 @@ def execute_turn(ct, game):
         ad = max(attacks, key=tlen)
         tl = tlen(ad)
         rate = ATTACK_RATES[min(L, 5)][0 if tl > L else (1 if tl == L else 2)]
+        if LOCAL_ODDS:
+            # a trade drops pearls for whoever has more heads nearby: press when we outnumber them
+            na = sum(1 for did, h in heads.items() if teams[did] == my_team and did != MY_ID and clonefeat.tdist(W, H, head, h) <= 3)
+            ne = sum(1 for did, h in heads.items() if teams[did] != my_team and clonefeat.tdist(W, H, head, h) <= 3)
+            rate = min(0.95, rate * 1.6) if na + 1 > ne else rate * 0.5
         if random.random() < rate:
             HIST.append(CTX.nb(head)[ad])
             ct.make_move(DIRS[ad])
