@@ -32,13 +32,14 @@ QROOM = 2        # other dragons keep this far from the queen's head (real games
 SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
 CHAMPS = False    # feed a champion once the queen is gone
 OPEN_RUSH = True # opening: head for the rank-1 bot's learned opening positions on this map
-OPEN_UNTIL = 40
+OPEN_UNTIL = 60
+OPEN_FORCE = True  # keep heading for the opening spots even with pearls in view (rank-1 holds the fields)
 OPEN_MAX_AREA = 1000  # small maps only: on big maps the learned targets just scatter the colony
 RUSH = False     # opening: head straight for the nearest fountain while no pearl is in view
 RUSH_UNTIL = 40
-FARM = False     # walk to pearl fountains (beds refilling every ~1-3 rounds) and circle them
+FARM = True      # walk to pearl fountains (beds refilling every ~1-3 rounds) and circle them
 FARM_UNTIL = 400
-FARM_RADIUS = 12
+FARM_RADIUS = 6
 FOUNT = None
 ESC = True       # queen keeps two exits other heads cannot reach next turn
 QD_FEED = 0.0    # suicide-score boost next to a long ally once the queen is gone
@@ -588,13 +589,14 @@ def execute_turn(ct, game):
                       and fd[d][10] >= 6]
             if closer:
                 cands = closer
-    if OPEN_RUSH and not IS_QUEEN and rnd < OPEN_UNTIL and W * H <= OPEN_MAX_AREA and fg[12] == 0 and len(CANDS) <= 1:
+    if (OPEN_RUSH and not IS_QUEEN and rnd < OPEN_UNTIL and W * H <= OPEN_MAX_AREA and len(CANDS) <= 1
+            and (fg[12] == 0 or OPEN_FORCE)):
         # opening race: walk to where the rank-1 bot's dragons stand in rounds 10-40 on this map
         # (learned from its replays, mirrored to our side); it wins the pearl fields that way
         od = open_dist()
         if od is not None:
             here = od(head)
-            if 0 < here < 255:
+            if (2 if OPEN_FORCE else 0) < here < 255:
                 closer = [d for d in cands if CTX.nb(head)[d] >= 0 and od(CTX.nb(head)[d]) < here
                           and fd[d][10] >= 4]
                 if closer:
@@ -608,7 +610,8 @@ def execute_turn(ct, game):
                       and fd[d][10] >= 4]
             if closer:
                 cands = closer
-    if FARM and FOUNT is not None and not IS_QUEEN and rnd < FARM_UNTIL and len(CANDS) <= 1:
+    if (FARM and FOUNT is not None and not IS_QUEEN and rnd < FARM_UNTIL and len(CANDS) <= 1
+            and W * H <= OPEN_MAX_AREA):
         # rank-1's colony growth comes from fountains (Devil, r<150: 140 of its pearls vs our 2):
         # its short dragons walk to one and loop a 2x2 block over it, splitting at length 4
         fh = FOUNT[head]
