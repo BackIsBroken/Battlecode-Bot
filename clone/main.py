@@ -587,7 +587,7 @@ def execute_turn(ct, game):
                       and fd[d][10] >= 6]
             if closer:
                 cands = closer
-    if OPEN_RUSH and rnd < OPEN_UNTIL and fg[12] == 0 and len(CANDS) <= 1:
+    if OPEN_RUSH and not IS_QUEEN and rnd < OPEN_UNTIL and fg[12] == 0 and len(CANDS) <= 1:
         # opening race: walk to where the rank-1 bot's dragons stand in rounds 10-40 on this map
         # (learned from its replays, mirrored to our side); it wins the pearl fields that way
         od = open_dist()
