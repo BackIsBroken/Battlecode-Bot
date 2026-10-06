@@ -31,6 +31,7 @@ QHOME = True     # from round 100 the queen drifts back toward her spawn (rank-1
 QROOM = 2        # other dragons keep this far from the queen's head (real games: allies boxed her in)
 SPLIT_BIAS = 0.0  # our smaller colonies push the model to split twice as often as rank-1 mid-game
 CHAMPS = False    # feed a champion once the queen is gone
+FORCE_SPLIT = 0  # round until which non-queen dragons always split at length >= 4 (0 = off)
 GREEDY = True    # always take the shortest path to the nearest visible pearl
 GREEDY_QUEEN = False
 OPEN_RUSH = True # opening: head for the rank-1 bot's learned opening positions on this map
@@ -461,6 +462,8 @@ def execute_turn(ct, game):
     crowded = any(clonefeat.tdist(W, H, head, h) <= 3 for did, h in heads.items() if did != MY_ID)
     if kind == 1 and IS_QUEEN and legal and crowded and rnd >= 50:
         kind = 0   # her children spawn beside her: only split with room (the rank-1 queen splits freely early)
+    if FORCE_SPLIT and not IS_QUEEN and rnd < FORCE_SPLIT and L >= 4 and legal and kind == 0 and fg[11] > 2:
+        kind = 1   # economy: more dragons sooner covers more pearls (rank-1 splits ~85% at L4 early)
     if rnd < 50 and L >= 4 and IS_QUEEN and legal and kind == 0:
         kind = 1   # rank-1 queen: 87% of her length-4 turns before round 50 are splits (colony bootstrap)
     if kind == 1 or not legal:
