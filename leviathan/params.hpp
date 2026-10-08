@@ -491,6 +491,12 @@
 #ifndef P_QUEEN_ROOM_PEN
 #define P_QUEEN_ROOM_PEN 3.0  // v18: score per step inside that radius
 #endif
+#ifndef P_QUEEN_KING
+#define P_QUEEN_KING 1  // v18: on maps of P_QUEEN_HOME_MINN+ tiles the queen is the king from feedPullStart - P_QUEEN_KING_LEAD
+#endif
+#ifndef P_QUEEN_KING_LEAD
+#define P_QUEEN_KING_LEAD 30
+#endif
 #ifndef P_QUEEN_NODIE
 #define P_QUEEN_NODIE 1e9  // v18: score charged to a queen candidate that kills her on purpose
 #endif

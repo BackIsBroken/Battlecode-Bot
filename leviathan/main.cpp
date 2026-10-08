@@ -1892,6 +1892,7 @@ bool loneHunt = false;   // v11: this turn I hunt the enemy's lone king
 bool kingInit = false;
 bool isKingFlag = false;
 bool queenNow = false;   // v18: dragon 0/1 is the team's queen; round 500 is decided on queen length first
+inline bool qkPhase();
 int lastContact = -1;                 // last round any enemy part was seen (directly or via gossip)
 inline uint64_t mix64(uint64_t x) {
     x += 0x9E3779B97F4A7C15ULL;
@@ -1966,6 +1967,11 @@ void receiveGossip() {
             if (tile >= N || round > rnd || id == myId || round < rnd - kingFreshN()) continue;
             bool better = kingK.id < 0 || kingK.round < rnd - kingFreshN() ||
                           (id == kingK.id ? round > kingK.round : (len > kingK.len || (len == kingK.len && id < kingK.id)));
+            if (qkPhase()) {
+                bool qOld = kingK.id >= 0 && kingK.id <= 1 && kingK.round >= rnd - kingFreshN();
+                if (id <= 1 && !qOld) better = true;
+                else if (id > 1 && qOld) better = false;
+            }
             if (better) kingK = {tile, round, len, id};
         } else if (type == GT_HOME) {
             int tile = (int)(pl & 0xFFFF), id = (int)((pl >> 16) & 0xFFFF);
@@ -3749,6 +3755,9 @@ bool courierSplitOK(int k) {
     return cs >= cdep;
 }
 
+// v18: on big maps the queen becomes the king for the endgame (round 500 compares queens first; the feeding
+// that made our longest dragon now makes her long)
+inline bool qkPhase() { return P_QUEEN_KING && N >= P_QUEEN_HOME_MINN && rnd >= cfg.feedPullStart - P_QUEEN_KING_LEAD; }
 inline bool lateKingPhase() { return P_LATE_KING > 0 && cfg.kingSplitUntil >= 9999 && rnd < cfg.feedPullStart - P_LATE_KING; }
 
 void detectSide() {
@@ -3885,6 +3894,10 @@ void decide() {
     else if (lateKingPhase()) iAmKing = false;   // pure swarm until the endgame
     else iAmKing = P_KING == 1 && myLen >= P_KING_CLAIM_LEN && farmerRole != 1 &&
               (kingK.id < 0 || kingK.id == myId || myLen > kingK.len || (myLen == kingK.len && myId < kingK.id));
+    if (qkPhase()) {
+        if (queenNow) iAmKing = true;
+        else if (kingK.id >= 0 && kingK.id <= 1 && kingK.round >= rnd - kingFreshN()) iAmKing = false;
+    }
     if (iAmKing) { kingK = {headT, rnd, myLen, myId}; kingDist = nullptr; }
     else if (kingK.id == myId) kingK = {-1, -1, 0, -1};
 
