@@ -479,6 +479,9 @@
 #ifndef P_QUEEN_HOME_R
 #define P_QUEEN_HOME_R 6  // v18: the queen stays within this many steps of her spawn (0 = off)
 #endif
+#ifndef P_QUEEN_HOME_MINN
+#define P_QUEEN_HOME_MINN 900  // v18: home pull only on maps of at least this many tiles (small maps end in eliminations: the queen fights)
+#endif
 #ifndef P_QUEEN_HOME_PULL
 #define P_QUEEN_HOME_PULL 4.0  // v18: score per step beyond P_QUEEN_HOME_R for a move away from home
 #endif
