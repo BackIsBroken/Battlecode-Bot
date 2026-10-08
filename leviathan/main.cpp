@@ -4377,7 +4377,7 @@ void decide() {
     // richest zone in the first rounds (Trophy: through the portal into the cup by round 9) and keep
     // it; whoever gets there first holds it. The original dragons of our side nearest to the best
     // zone (by path, portals included) head there from round 0; the others play as usual.
-    if (P_OPEN_RUSH > 0 && dbMap >= 0 && cfg.zonePull <= 0 && openRushMap() && firstRound == 0 && rnd < P_OPEN_RUSH_UNTIL && !isKingFlag && !roleMaps() && spawnHead >= 0) {   // (maps with their own zone rush keep it: Schooltime)
+    if (P_OPEN_RUSH > 0 && dbMap >= 0 && cfg.zonePull <= 0 && openRushMap() && firstRound == 0 && rnd < P_OPEN_RUSH_UNTIL && !isKingFlag && !queenNow && !roleMaps() && spawnHead >= 0) {   // (maps with their own zone rush keep it: Schooltime)
         if (zones.empty()) buildZones();
         const MapDef& M = MAPDB[dbMap];
         int ti = mySide();
@@ -4801,6 +4801,18 @@ void decide() {
     if (queenNow)
         for (auto& c : cands)
             if (!strcmp(c.why, "donate") || !strcmp(c.why, "pocket") || !strcmp(c.why, "attack")) c.score -= P_QUEEN_NODIE;
+    // v18: the rank-1 team's queen stays near her spawn inside her own swarm (alive at the end in 70% of its
+    // games against our earlier bots); ours roamed into the fights. Pull her home beyond P_QUEEN_HOME_R.
+    if (queenNow && P_QUEEN_HOME_R > 0 && spawnHead >= 0) {
+        int d0 = manhattan(headT, spawnHead);
+        for (auto& c : cands) {
+            if (c.split || c.dirs.empty() || c.score < -1e9) continue;
+            int t = headT;
+            for (int d : c.dirs) { int v = nb[t][d]; if (v < 0) break; t = v; }
+            int dd = manhattan(t, spawnHead);
+            if (dd > P_QUEEN_HOME_R && dd > d0) c.score -= P_QUEEN_HOME_PULL * (dd - P_QUEEN_HOME_R);
+        }
+    }
     Cand* best = nullptr;
     for (auto& c : cands) if (!best || c.score > best->score) best = &c;
 #ifdef DEBUGLOG

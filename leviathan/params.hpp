@@ -476,6 +476,12 @@
 #ifndef P_QUEEN_RISK
 #define P_QUEEN_RISK 3.0  // v18: threat weight multiplier for the queen
 #endif
+#ifndef P_QUEEN_HOME_R
+#define P_QUEEN_HOME_R 6  // v18: the queen stays within this many steps of her spawn (0 = off)
+#endif
+#ifndef P_QUEEN_HOME_PULL
+#define P_QUEEN_HOME_PULL 4.0  // v18: score per step beyond P_QUEEN_HOME_R for a move away from home
+#endif
 #ifndef P_QUEEN_NODIE
 #define P_QUEEN_NODIE 1e9  // v18: score charged to a queen candidate that kills her on purpose
 #endif
