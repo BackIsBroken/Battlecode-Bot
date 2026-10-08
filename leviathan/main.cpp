@@ -4801,6 +4801,19 @@ void decide() {
     if (queenNow)
         for (auto& c : cands)
             if (!strcmp(c.why, "donate") || !strcmp(c.why, "pocket") || !strcmp(c.why, "attack")) c.score -= P_QUEEN_NODIE;
+    // v18: give our queen room: in local games she died boxed in by our own dragons (every move fatal) or hit
+    // head-on by one of them; non-queen dragons pay for ending a move next to her head
+    if (!queenNow && P_QUEEN_ROOM_PEN > 0)
+        for (auto& a : allies) {
+            if (a.id > 1) continue;
+            for (auto& c : cands) {
+                if (c.split || c.dirs.empty() || c.score < -1e9) continue;
+                int t = headT;
+                for (int d : c.dirs) { int v = nb[t][d]; if (v < 0) break; t = v; }
+                int dd = manhattan(t, a.head);
+                if (dd <= P_QUEEN_ROOM_R) c.score -= P_QUEEN_ROOM_PEN * (P_QUEEN_ROOM_R + 1 - dd);
+            }
+        }
     // v18: the rank-1 team's queen stays near her spawn inside her own swarm (alive at the end in 70% of its
     // games against our earlier bots); ours roamed into the fights. Pull her home beyond P_QUEEN_HOME_R.
     if (queenNow && P_QUEEN_HOME_R > 0 && spawnHead >= 0) {
