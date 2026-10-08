@@ -4803,7 +4803,7 @@ void decide() {
             if (!strcmp(c.why, "donate") || !strcmp(c.why, "pocket") || !strcmp(c.why, "attack")) c.score -= P_QUEEN_NODIE;
     // v18: give our queen room: in local games she died boxed in by our own dragons (every move fatal) or hit
     // head-on by one of them; non-queen dragons pay for ending a move next to her head
-    if (!queenNow && P_QUEEN_ROOM_PEN > 0)
+    if (!queenNow && P_QUEEN_ROOM_PEN > 0 && N >= P_QUEEN_HOME_MINN)   // (small maps: the bubble cost 13 -> 6 of 24 games)
         for (auto& a : allies) {
             if (a.id > 1) continue;
             for (auto& c : cands) {
